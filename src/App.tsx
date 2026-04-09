@@ -238,7 +238,7 @@ const ZoneLayer = React.memo(({
                     onClick={(e) => {
                       e.stopPropagation();
                       setFullImageUrl(zone.noteImage);
-                      setShowImageModal(true);
+                      setIsImageViewerOpen(true);
                     }}
                   />
                 </div>
@@ -311,7 +311,7 @@ const ZoneLayer = React.memo(({
                     onClick={(e) => {
                       e.stopPropagation();
                       setFullImageUrl(zone.noteImage);
-                      setShowImageModal(true);
+                      setIsImageViewerOpen(true);
                     }}
                   />
                 </div>
@@ -577,6 +577,7 @@ export default function App() {
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
+  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -1489,6 +1490,36 @@ export default function App() {
       </header>
 
       <div className="flex flex-1 relative overflow-hidden">
+        {/* Image Viewer - shown inside the app */}
+        <AnimatePresence>
+          {isImageViewerOpen && fullImageUrl && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/95 z-[3000] flex flex-col"
+            >
+              <div className="flex items-center justify-between p-4 bg-black/50">
+                <h3 className="text-white font-bold">Imagen Adjunta</h3>
+                <button 
+                  onClick={() => { setIsImageViewerOpen(false); setFullImageUrl(null); }}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-white" />
+                </button>
+              </div>
+              <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+                <img 
+                  src={fullImageUrl} 
+                  alt="Imagen completa" 
+                  className="max-w-full max-h-full object-contain rounded-lg"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Sidebar */}
         <AnimatePresence>
           {sidebarOpen && (
@@ -3237,40 +3268,6 @@ export default function App() {
               >
                 Cerrar
               </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Full Screen Image Modal */}
-      <AnimatePresence>
-        {showImageModal && fullImageUrl && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 flex items-center justify-center z-[9999] p-4"
-            onClick={() => { setShowImageModal(false); setFullImageUrl(null); }}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative max-w-full max-h-full"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => { setShowImageModal(false); setFullImageUrl(null); }}
-                className="absolute -top-10 right-0 text-white hover:text-slate-300 transition-colors"
-              >
-                <X className="w-8 h-8" />
-              </button>
-              <img 
-                src={fullImageUrl} 
-                alt="Imagen completa" 
-                className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-                referrerPolicy="no-referrer"
-              />
             </motion.div>
           </motion.div>
         )}
