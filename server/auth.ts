@@ -98,7 +98,12 @@ router.get('/verify', async (req, res) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
 
     const result = await pool.query(
       'SELECT id, email, name FROM users WHERE id = $1',
@@ -111,7 +116,8 @@ router.get('/verify', async (req, res) => {
 
     res.json({ user: result.rows[0] });
   } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
+    console.error('Verify error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -124,13 +130,20 @@ router.post('/projects', async (req, res) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid token format' });
+    }
 
     const { name, data } = req.body;
 
     if (!name || !data) {
       return res.status(400).json({ error: 'Name and data are required' });
     }
+
+    console.log('Saving project for user:', decoded.userId, 'name:', name);
 
     // Check if project exists for this user
     const existingProject = await pool.query(
@@ -144,12 +157,14 @@ router.post('/projects', async (req, res) => {
         'UPDATE projects SET data = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2 AND name = $3',
         [JSON.stringify(data), decoded.userId, name]
       );
+      console.log('Project updated');
     } else {
       // Create new project
       await pool.query(
         'INSERT INTO projects (user_id, name, data) VALUES ($1, $2, $3)',
         [decoded.userId, name, JSON.stringify(data)]
       );
+      console.log('Project created');
     }
 
     res.json({ success: true, message: 'Project saved' });
