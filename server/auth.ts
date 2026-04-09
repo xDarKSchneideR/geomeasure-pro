@@ -143,7 +143,13 @@ router.post('/projects', async (req, res) => {
       return res.status(400).json({ error: 'Name and data are required' });
     }
 
-    console.log('Saving project for user:', decoded.userId, 'name:', name);
+    // Check data size - warn if too large
+    const dataSize = JSON.stringify(data).length;
+    console.log('Project data size:', dataSize, 'bytes');
+    
+    if (dataSize > 8000000) { // 8MB
+      console.warn('Project data is very large, may cause issues');
+    }
 
     // Check if project exists for this user
     const existingProject = await pool.query(
@@ -168,9 +174,13 @@ router.post('/projects', async (req, res) => {
     }
 
     res.json({ success: true, message: 'Project saved' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Save project error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    if (error.code === 'request entity too large') {
+      res.status(413).json({ error: 'El proyecto es demasiado grande. Intenta reducir el tamaño de las imágenes.' });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 });
 

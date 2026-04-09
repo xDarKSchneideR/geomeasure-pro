@@ -1070,10 +1070,16 @@ export default function App() {
 
   const handleExportProject = async () => {
     if (user && token) {
-      // Guardar en la base de datos (cloud)
+      // Guardar en la base de datos (cloud) - SIN imágenes para reducir tamaño
       try {
+        // Crear copia sin imágenes para guardar en la nube
+        const zonesWithoutImages = state.zones.map(zone => ({
+          ...zone,
+          noteImage: undefined // Quitar imagen para reducir tamaño
+        }));
+        
         const projectData = {
-          zones: state.zones,
+          zones: zonesWithoutImages,
           groups: state.groups,
           mapCenter: state.mapCenter,
           mapZoom: state.mapZoom
@@ -1082,7 +1088,7 @@ export default function App() {
         const projectName = `proyecto-${new Date().toISOString().split('T')[0]}`;
         
         console.log('Saving to:', `${API_URL}/api/auth/projects`);
-        console.log('Token:', token ? 'present' : 'missing');
+        console.log('Data size:', JSON.stringify(projectData).length, 'bytes');
         
         const response = await fetch(`${API_URL}/api/auth/projects`, {
           method: 'POST',
@@ -1110,7 +1116,7 @@ export default function App() {
         alert('Error al guardar en la nube: ' + err.message);
       }
     } else {
-      // Guardar localmente (sin login)
+      // Guardar localmente (sin login) - guardar TODO incluyendo imágenes
       const projectData = {
         version: '1.0',
         state: {
