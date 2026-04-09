@@ -1,0 +1,5 @@
+{
+  "name": "GeoMeasure Pro",
+  "description": "Herramienta profesional para medir áreas, perímetros y distancias en mapas. Permite importar archivos KMZ y gestionar zonas personalizadas.",
+  "requestFramePermissions": ["geolocation"]
+}

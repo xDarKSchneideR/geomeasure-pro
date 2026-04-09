@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+*.log
+
+# Environment variables
+.env*
+
+# OS files
+.DS_Store
+
+# Backup files
+*.rar
+*.zip
+
+# Coverage
+coverage/
+
+# Build
+build/
