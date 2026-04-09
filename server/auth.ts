@@ -115,4 +115,121 @@ router.get('/verify', async (req, res) => {
   }
 });
 
+// Save project
+router.post('/projects', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    const { name, data } = req.body;
+
+    if (!name || !data) {
+      return res.status(400).json({ error: 'Name and data are required' });
+    }
+
+    // Check if project exists for this user
+    const existingProject = await pool.query(
+      'SELECT id FROM projects WHERE user_id = $1 AND name = $2',
+      [decoded.userId, name]
+    );
+
+    if (existingProject.rows.length > 0) {
+      // Update existing project
+      await pool.query(
+        'UPDATE projects SET data = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2 AND name = $3',
+        [JSON.stringify(data), decoded.userId, name]
+      );
+    } else {
+      // Create new project
+      await pool.query(
+        'INSERT INTO projects (user_id, name, data) VALUES ($1, $2, $3)',
+        [decoded.userId, name, JSON.stringify(data)]
+      );
+    }
+
+    res.json({ success: true, message: 'Project saved' });
+  } catch (error) {
+    console.error('Save project error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all projects
+router.get('/projects', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    const result = await pool.query(
+      'SELECT id, name, created_at, updated_at FROM projects WHERE user_id = $1 ORDER BY updated_at DESC',
+      [decoded.userId]
+    );
+
+    res.json({ projects: result.rows });
+  } catch (error) {
+    console.error('Get projects error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get single project
+router.get('/projects/:id', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    const result = await pool.query(
+      'SELECT id, name, data, created_at, updated_at FROM projects WHERE id = $1 AND user_id = $2',
+      [req.params.id, decoded.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    res.json({ project: result.rows[0] });
+  } catch (error) {
+    console.error('Get project error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete project
+router.delete('/projects/:id', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    await pool.query(
+      'DELETE FROM projects WHERE id = $1 AND user_id = $2',
+      [req.params.id, decoded.userId]
+    );
+
+    res.json({ success: true, message: 'Project deleted' });
+  } catch (error) {
+    console.error('Delete project error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
