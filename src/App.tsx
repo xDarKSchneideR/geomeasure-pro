@@ -1069,7 +1069,7 @@ export default function App() {
   };
 
   const handleExportProject = async () => {
-    if (user) {
+    if (user && token) {
       // Guardar en la base de datos (cloud)
       try {
         const projectData = {
@@ -1081,11 +1081,14 @@ export default function App() {
         
         const projectName = `proyecto-${new Date().toISOString().split('T')[0]}`;
         
+        console.log('Saving to:', `${API_URL}/api/auth/projects`);
+        console.log('Token:', token ? 'present' : 'missing');
+        
         const response = await fetch(`${API_URL}/api/auth/projects`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
             name: projectName,
@@ -1093,15 +1096,18 @@ export default function App() {
           })
         });
 
+        console.log('Response status:', response.status);
+        
         if (response.ok) {
           alert('Proyecto guardado en la nube');
         } else {
-          const error = await response.json();
-          alert('Error al guardar: ' + error.error);
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('Error response:', errorData);
+          alert('Error al guardar: ' + errorData.error);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error saving to cloud:', err);
-        alert('Error al guardar en la nube');
+        alert('Error al guardar en la nube: ' + err.message);
       }
     } else {
       // Guardar localmente (sin login)
