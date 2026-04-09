@@ -1055,6 +1055,14 @@ export default function App() {
       return;
     }
     
+    const confirmed = confirm(
+      '¿Exportar a GeoJSON?\n\n' +
+      '- Se guardarán todas las zonas (polígonos, líneas, puntos)\n' +
+      '- NO se incluirán las imágenes adjuntas\n' +
+      '- Ideal para compartir datos con otros programas GIS'
+    );
+    if (!confirmed) return;
+    
     // Exportar SIN imágenes (solo datos, ideal para compartir)
     const geojson = exportZonesWithoutImages(state.zones, state.groups);
     const blob = new Blob([geojson], { type: 'application/json' });
@@ -1070,6 +1078,15 @@ export default function App() {
 
   const handleExportProject = async () => {
     if (user && token) {
+      const confirmed = confirm(
+        '¿Guardar proyecto en la nube?\n\n' +
+        '- Se guardarán todas las zonas, grupos y configuración del mapa\n' +
+        '- Se incluirán las imágenes adjuntas\n' +
+        '- Podrás recuperar este proyecto desde cualquier dispositivo\n\n' +
+        'NOTA: Si ya existe un proyecto con la misma fecha, será sobrescrito.'
+      );
+      if (!confirmed) return;
+      
       // Guardar en la base de datos (cloud) - CON imágenes
       try {
         const projectData = {
@@ -1110,7 +1127,15 @@ export default function App() {
         alert('Error al guardar en la nube: ' + err.message);
       }
     } else {
-      // Guardar localmente (sin login) - guardar TODO incluyendo imágenes
+      // Guardar localmente (sin login)
+      const confirmed = confirm(
+        '¿Descargar proyecto como archivo?\n\n' +
+        '- Se guardarán todas las zonas, grupos y configuración del mapa\n' +
+        '- Se incluirán las imágenes adjuntas\n' +
+        '- Se descargará un archivo JSON en tu dispositivo'
+      );
+      if (!confirmed) return;
+      
       const projectData = {
         version: '1.0',
         state: {
@@ -1203,6 +1228,14 @@ export default function App() {
 
   const handleExportImage = async () => {
     if (!mapContainerRef.current) return;
+    
+    const confirmed = confirm(
+      '¿Exportar mapa como imagen?\n\n' +
+      '- Se capturará el área visible del mapa\n' +
+      '- Se incluirá el fondo del mapa que estés usando\n' +
+      '- Se descargará una imagen PNG'
+    );
+    if (!confirmed) return;
     
     setIsExportingImage(true);
     try {
