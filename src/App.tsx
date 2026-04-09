@@ -1070,16 +1070,10 @@ export default function App() {
 
   const handleExportProject = async () => {
     if (user && token) {
-      // Guardar en la base de datos (cloud) - SIN imágenes para reducir tamaño
+      // Guardar en la base de datos (cloud) - CON imágenes
       try {
-        // Crear copia sin imágenes para guardar en la nube
-        const zonesWithoutImages = state.zones.map(zone => ({
-          ...zone,
-          noteImage: undefined // Quitar imagen para reducir tamaño
-        }));
-        
         const projectData = {
-          zones: zonesWithoutImages,
+          zones: state.zones,
           groups: state.groups,
           mapCenter: state.mapCenter,
           mapZoom: state.mapZoom
