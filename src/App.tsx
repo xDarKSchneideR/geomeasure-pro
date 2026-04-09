@@ -552,6 +552,9 @@ export default function App() {
   const [authName, setAuthName] = useState('');
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [showProjectsModal, setShowProjectsModal] = useState(false);
+  const [cloudProjects, setCloudProjects] = useState<{ id: number; name: string; updated_at: string }[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
 
   useEffect(() => {
     try {
@@ -1065,18 +1068,55 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleExportProject = () => {
-    const projectData = {
-      version: '1.0',
-      state: {
-        zones: state.zones,
-        groups: state.groups,
-        mapCenter: state.mapCenter,
-        mapZoom: state.mapZoom
+  const handleExportProject = async () => {
+    if (user) {
+      // Guardar en la base de datos (cloud)
+      try {
+        const projectData = {
+          zones: state.zones,
+          groups: state.groups,
+          mapCenter: state.mapCenter,
+          mapZoom: state.mapZoom
+        };
+        
+        const projectName = `proyecto-${new Date().toISOString().split('T')[0]}`;
+        
+        const response = await fetch(`${API_URL}/api/auth/projects`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: projectName,
+            data: projectData
+          })
+        });
+
+        if (response.ok) {
+          alert('Proyecto guardado en la nube');
+        } else {
+          const error = await response.json();
+          alert('Error al guardar: ' + error.error);
+        }
+      } catch (err) {
+        console.error('Error saving to cloud:', err);
+        alert('Error al guardar en la nube');
       }
-    };
-    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
-    saveAs(blob, `proyecto-mapa-${new Date().toISOString().split('T')[0]}.json`);
+    } else {
+      // Guardar localmente (sin login)
+      const projectData = {
+        version: '1.0',
+        state: {
+          zones: state.zones,
+          groups: state.groups,
+          mapCenter: state.mapCenter,
+          mapZoom: state.mapZoom
+        }
+      };
+      const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+      saveAs(blob, `proyecto-mapa-${new Date().toISOString().split('T')[0]}.json`);
+    }
   };
 
   const handleImportProject = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1234,6 +1274,7 @@ export default function App() {
     setToken(null);
     localStorage.removeItem('geo-user');
     localStorage.removeItem('geo-token');
+    setCloudProjects([]);
   };
 
   const verifyToken = async () => {
@@ -1251,6 +1292,77 @@ export default function App() {
       }
     } catch {
       handleLogout();
+    }
+  };
+
+  // Load projects from cloud
+  const loadCloudProjects = async () => {
+    if (!user || !token) return;
+    setLoadingProjects(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/projects`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCloudProjects(data.projects);
+      }
+    } catch (err) {
+      console.error('Error loading projects:', err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  // Load a single project from cloud
+  const loadCloudProject = async (projectId: number) => {
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_URL}/api/auth/projects/${projectId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const projectData = data.project.data;
+        setState(prev => ({
+          ...prev,
+          zones: projectData.zones || [],
+          groups: projectData.groups || [],
+          mapCenter: projectData.mapCenter || [40.4168, -3.7038],
+          mapZoom: projectData.mapZoom || 6,
+          selectedZoneId: null,
+          selectedGroupId: null,
+          isDrawing: false,
+          isEditing: false,
+          drawMode: null,
+          tempPoints: []
+        }));
+        setShowProjectsModal(false);
+        alert('Proyecto cargado desde la nube');
+      }
+    } catch (err) {
+      console.error('Error loading project:', err);
+      alert('Error al cargar el proyecto');
+    }
+  };
+
+  // Delete project from cloud
+  const deleteCloudProject = async (projectId: number) => {
+    if (!token) return;
+    if (!confirm('¿Estás seguro de que quieres eliminar este proyecto?')) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/auth/projects/${projectId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.ok) {
+        loadCloudProjects();
+        alert('Proyecto eliminado');
+      }
+    } catch (err) {
+      console.error('Error deleting project:', err);
+      alert('Error al eliminar el proyecto');
     }
   };
 
@@ -1762,6 +1874,15 @@ export default function App() {
                     <Upload className="w-3 h-3" />
                     Cargar
                   </button>
+                  {user && (
+                    <button 
+                      onClick={() => { loadCloudProjects(); setShowProjectsModal(true); }}
+                      className="flex-1 bg-blue-600 border border-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Database className="w-3 h-3" />
+                      Nube
+                    </button>
+                  )}
                   <button 
                     onClick={handleExportImage}
                     disabled={isExportingImage}
@@ -2976,6 +3097,69 @@ export default function App() {
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Cloud Projects Modal */}
+      <AnimatePresence>
+        {showProjectsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4"
+            onClick={() => setShowProjectsModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[80vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-slate-800">Mis Proyectos en la Nube</h2>
+                <button
+                  onClick={() => setShowProjectsModal(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg"
+                >
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+
+              {loadingProjects ? (
+                <p className="text-center text-slate-500 py-8">Cargando proyectos...</p>
+              ) : cloudProjects.length === 0 ? (
+                <p className="text-center text-slate-500 py-8">No tienes proyectos guardados en la nube.</p>
+              ) : (
+                <div className="flex-1 overflow-y-auto space-y-2">
+                  {cloudProjects.map(project => (
+                    <div key={project.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                      <div className="flex-1 cursor-pointer" onClick={() => loadCloudProject(project.id)}>
+                        <p className="font-bold text-slate-800">{project.name}</p>
+                        <p className="text-xs text-slate-500">
+                          Actualizado: {new Date(project.updated_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => deleteCloudProject(project.id)}
+                        className="p-2 hover:bg-red-100 text-red-500 rounded-lg"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={() => setShowProjectsModal(false)}
+                className="w-full mt-4 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-all"
+              >
+                Cerrar
+              </button>
             </motion.div>
           </motion.div>
         )}
