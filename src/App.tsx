@@ -1162,6 +1162,13 @@ export default function App() {
           
           // Check if it's a project file (has state property)
           if (data.state) {
+            // Confirmar antes de sobrescribir
+            const hasData = state.zones.length > 0 || state.groups.length > 0;
+            if (hasData) {
+              const confirmed = confirm('¿Estás seguro de cargar este proyecto? Se sobrescribirá todo lo que tienes actualmente en pantalla.');
+              if (!confirmed) return;
+            }
+            
             setState(prev => ({
               ...prev,
               ...data.state,
@@ -1172,6 +1179,7 @@ export default function App() {
               drawMode: null,
               tempPoints: []
             }));
+            alert('Proyecto cargado correctamente');
           } 
           // Check if it's a GeoJSON (has type FeatureCollection)
           else if (data.type === 'FeatureCollection') {
@@ -1323,6 +1331,14 @@ export default function App() {
   // Load a single project from cloud
   const loadCloudProject = async (projectId: number) => {
     if (!token) return;
+    
+    // Confirmar antes de sobrescribir
+    const hasData = state.zones.length > 0 || state.groups.length > 0;
+    if (hasData) {
+      const confirmed = confirm('¿Estás seguro de cargar este proyecto? Se sobrescribirá todo lo que tienes actualmente en pantalla.');
+      if (!confirmed) return;
+    }
+    
     try {
       const response = await fetch(`${API_URL}/api/auth/projects/${projectId}`, {
         headers: { Authorization: `Bearer ${token}` }
