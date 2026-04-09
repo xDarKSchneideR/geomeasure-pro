@@ -230,7 +230,17 @@ const ZoneLayer = React.memo(({
               )}
               {zone.noteImage && (
                 <div className="mt-2 rounded overflow-hidden border border-slate-100">
-                  <img src={zone.noteImage} alt="Nota" className="w-full h-auto max-h-[100px] object-cover" referrerPolicy="no-referrer" />
+                  <img 
+                    src={zone.noteImage} 
+                    alt="Nota" 
+                    className="w-full h-auto max-h-[100px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                    referrerPolicy="no-referrer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFullImageUrl(zone.noteImage);
+                      setShowImageModal(true);
+                    }}
+                  />
                 </div>
               )}
             </div>
@@ -291,11 +301,21 @@ const ZoneLayer = React.memo(({
                 {zone.noteText}
               </div>
             )}
-            {zone.noteImage && (
-              <div className="mt-2 rounded overflow-hidden border border-slate-100">
-                <img src={zone.noteImage} alt="Nota" className="w-full h-auto max-h-[100px] object-cover" referrerPolicy="no-referrer" />
-              </div>
-            )}
+              {zone.noteImage && (
+                <div className="mt-2 rounded overflow-hidden border border-slate-100">
+                  <img 
+                    src={zone.noteImage} 
+                    alt="Nota" 
+                    className="w-full h-auto max-h-[100px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                    referrerPolicy="no-referrer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFullImageUrl(zone.noteImage);
+                      setShowImageModal(true);
+                    }}
+                  />
+                </div>
+              )}
           </div>
         </Popup>
       </Marker>
@@ -555,6 +575,8 @@ export default function App() {
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [cloudProjects, setCloudProjects] = useState<{ id: number; name: string; updated_at: string }[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -3215,6 +3237,40 @@ export default function App() {
               >
                 Cerrar
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Full Screen Image Modal */}
+      <AnimatePresence>
+        {showImageModal && fullImageUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 flex items-center justify-center z-[9999] p-4"
+            onClick={() => { setShowImageModal(false); setFullImageUrl(null); }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-full max-h-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => { setShowImageModal(false); setFullImageUrl(null); }}
+                className="absolute -top-10 right-0 text-white hover:text-slate-300 transition-colors"
+              >
+                <X className="w-8 h-8" />
+              </button>
+              <img 
+                src={fullImageUrl} 
+                alt="Imagen completa" 
+                className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                referrerPolicy="no-referrer"
+              />
             </motion.div>
           </motion.div>
         )}
