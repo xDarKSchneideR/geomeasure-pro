@@ -84,10 +84,22 @@ async function main() {
   );
   
   const mode = args.mode || 'all';
-  const isCI = process.env.CI === 'true' || process.env.NETLIFY === 'true' || process.env.RENDER === 'true';
+  const isCI = process.env.CI === 'true' || process.env.NETLIFY === 'true' || process.env.RENDER === 'true' || process.env.NETLIFY_BUILD === 'true';
+  const skipValidation = args.skip === 'true' || args.s === 'true';
   
   log.header(`Validación de Seguridad Pre-Deploy [${mode.toUpperCase()}]`);
   if (isCI) log.info('🤖 Ejecutando en entorno CI/CD');
+  if (skipValidation) log.warn('⚠️  Validación omitida por flag --skip');
+  
+  // En modo local (no CI), permitir跳过 con --skip
+  if (!isCI && !skipValidation) {
+    log.info('');
+    log.info('💡 Para desarrollo local, podés:');
+    log.info('   1. Crear un archivo .env.local con las variables');
+    log.info('   2. O ejecutar con --skip para omitir validación');
+    log.info('   Ejemplo: npm run build -- --skip');
+    log.info('');
+  }
 
   let hasErrors = false;
   const results = [];
@@ -157,14 +169,26 @@ async function main() {
   console.log('─'.repeat(60) + '\n');
 
   if (hasErrors) {
-    log.error('🚫 VALIDACIÓN FALLIDA: No se puede proceder con el deploy.');
-    log.info('💡 Solución: Configura las variables faltantes en:');
-    log.info('   • Frontend (Netlify): Site settings > Environment variables');
-    log.info('   • Backend (Render): Dashboard > Environment');
-    process.exit(1);
+    // En desarrollo local, permitir continuar con --skip
+    if (!isCI && !skipValidation) {
+      log.warn('⚠️  Ejecutando en modo desarrollo: puedes continuar con --skip');
+      log.info('   npm run build -- --skip');
+      process.exit(1);
+    } else if (skipValidation) {
+      log.warn('⚠️  Validación fallida pero continuada por --skip');
+      log.success('✅ Continuando con build...');
+      process.exit(0);
+    } else {
+      log.error('🚫 VALIDACIÓN FALLIDA: No se puede proceder con el deploy.');
+      log.info('💡 Solución: Configura las variables faltantes en:');
+      log.info('   • Frontend (Netlify): Site settings > Environment variables');
+      log.info('   • Backend (Render): Dashboard > Environment');
+      process.exit(1);
+    }
   } else {
     log.success('✅ Todas las validaciones pasaron. ¡Listo para deploy! 🚀');
     process.exit(0);
+  }
   }
 }
 
