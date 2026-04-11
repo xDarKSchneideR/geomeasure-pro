@@ -25,7 +25,6 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^1.29.0",
     "@tailwindcss/vite": "^4.1.14",
     "@tmcw/togeojson": "^7.1.2",
     "@turf/turf": "^7.3.4",

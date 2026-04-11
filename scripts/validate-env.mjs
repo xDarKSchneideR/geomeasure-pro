@@ -22,7 +22,6 @@ const CRITICAL_VARS = {
   backend: [
     { name: 'JWT_SECRET', minLen: 32, error: 'Debe tener al menos 32 caracteres (usa crypto.randomBytes(64))' },
     { name: 'DATABASE_URL', pattern: /^postgresql:\/\//, error: 'Debe ser una conexión PostgreSQL válida (Neon)' },
-    { name: 'GEMINI_API_KEY', minLen: 20, error: 'Clave de Gemini inválida - NUNCA exponer al frontend' },
     { name: 'NODE_ENV', allowed: ['production', 'staging'], error: 'Debe ser "production" o "staging"' },
     { name: 'PORT', optional: true }
   ]
