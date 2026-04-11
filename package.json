@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "npm run validate:frontend && vite build",
-    "build:backend": "npm run validate:backend && cd server && npm run build",
+    "build": "vite build",
+    "build:netlify": "npm run validate:frontend && vite build",
+    "build:render": "npm run validate:backend && cd server && npm run build",
     
     "validate": "node scripts/validate-env.mjs --mode=all",
     "validate:frontend": "node scripts/validate-env.mjs --mode=frontend",
