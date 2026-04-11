@@ -7,17 +7,13 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "npm run validate:frontend && vite build",
     "build:backend": "npm run validate:backend && cd server && npm run build",
-    
     "validate": "node scripts/validate-env.mjs --mode=all",
     "validate:frontend": "node scripts/validate-env.mjs --mode=frontend",
     "validate:backend": "node scripts/validate-env.mjs --mode=backend",
-    
     "predeploy:netlify": "npm run validate:frontend",
     "predeploy:render": "npm run validate:backend",
-    
     "security:audit": "npm audit --audit-level=high",
     "security:check": "npm run validate && npm run security:audit",
-    
     "preview": "vite preview",
     "server": "npx tsx server/index.ts",
     "start": "npm run server",
@@ -34,7 +30,6 @@
     "@vitejs/plugin-react": "^5.0.4",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
-    "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "file-saver": "^2.0.5",
     "html-to-image": "^1.11.13",
@@ -49,8 +44,7 @@
     "react-dom": "^19.0.0",
     "react-leaflet": "^5.0.0",
     "react-leaflet-cluster": "^4.1.3",
-    "vite": "^6.2.0",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite": "^6.2.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -60,9 +54,11 @@
     "@types/node": "^22.14.0",
     "@types/pg": "^8.20.0",
     "autoprefixer": "^10.4.21",
+    "dotenv": "^17.4.1",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vite-plugin-pwa": "^1.2.0"
   }
 }

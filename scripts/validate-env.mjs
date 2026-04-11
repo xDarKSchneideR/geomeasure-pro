@@ -1,8 +1,9 @@
-#!/usr/bin/env node
 /**
  * validate-env.mjs
- * Valida variables de entorno cr√≠ticas antes del deploy
+ * Valida variables de entorno crÌticas antes del deploy
  * Uso: node scripts/validate-env.mjs --mode=frontend|backend|all
+ * 
+ * ? Carga autom·tica de .env.local (sin necesidad de instalar dotenv)
  */
 
 import { readFileSync, existsSync } from 'fs';
@@ -12,92 +13,207 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 
-// üéØ Variables CR√çTICAS por entorno
+// ?? Cargar .env.local autom·ticamente (sin instalar dotenv)
+// Esto permite que el script funcione en local sin variables globales
+const envPath = join(rootDir, '.env.local');
+if (existsSync(envPath)) {
+  const envContent = readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach(line => {
+    line = line.trim();
+    // Ignorar lÌneas vacÌas y comentarios
+    if (line && !line.startsWith('#')) {
+      const eqIndex = line.indexOf('=');
+      if (eqIndex !== -1) {
+        const key = line.substring(0, eqIndex).trim();
+        // Remover comillas simples o dobles del valor si existen
+        let value = line.substring(eqIndex + 1).trim();
+        value = value.replace(/^['"]|['"]$/g, '');
+        // Solo asignar si no existe ya en process.env (prioridad a variables del sistema)
+        if (key && !process.env[key]) {
+          process.env[key] = value;
+        }
+      }
+    }
+  });
+}
+
+// ?? Variables CRÕTICAS por entorno
 const CRITICAL_VARS = {
   frontend: [
-    // ‚ö†Ô∏è Estas NO deben contener secretos reales
-    { name: 'VITE_API_BASE_URL', pattern: /^https:\/\//, error: 'Debe ser una URL HTTPS v√°lida' },
+    // ?? Estas NO deben contener secretos reales - solo configuraciÛn p˙blica
+    { 
+      name: 'VITE_API_BASE_URL', 
+      pattern: /^https:\/\//, 
+      error: 'Debe ser una URL HTTPS v·lida (ej: https://tu-api.onrender.com)' 
+    },
     { name: 'VITE_MAP_TILE_URL', optional: true }
   ],
   backend: [
-    { name: 'JWT_SECRET', minLen: 32, error: 'Debe tener al menos 32 caracteres (usa crypto.randomBytes(64))' },
-    { name: 'DATABASE_URL', pattern: /^postgresql:\/\//, error: 'Debe ser una conexi√≥n PostgreSQL v√°lida (Neon)' },
-    { name: 'NODE_ENV', allowed: ['production', 'staging'], error: 'Debe ser "production" o "staging"' },
+    { 
+      name: 'JWT_SECRET', 
+      minLen: 32, 
+      error: 'Debe tener al menos 32 caracteres. Genera una con: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"' 
+    },
+    { 
+      name: 'DATABASE_URL', 
+      pattern: /^postgresql:\/\//, 
+      error: 'Debe ser una conexiÛn PostgreSQL v·lida (Neon/Render)' 
+    },
+    { 
+      name: 'GEMINI_API_KEY', 
+      minLen: 20, 
+      error: 'Clave de Gemini inv·lida - NUNCA exponer al frontend' 
+    },
+    { 
+      name: 'NODE_ENV', 
+      allowed: ['production', 'staging', 'development'], 
+      error: 'Debe ser "production", "staging" o "development"' 
+    },
     { name: 'PORT', optional: true }
   ]
 };
 
-// üé® Colores para terminal
+// ?? Colores para terminal (compatible con Windows/Linux/macOS)
 const colors = {
   red: '\x1b[31m',
   green: '\x1b[32m',
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
+  cyan: '\x1b[36m',
   reset: '\x1b[0m',
   bold: '\x1b[1m'
 };
 
 const log = {
-  error: (msg) => console.error(`${colors.red}‚ùå ${msg}${colors.reset}`),
-  success: (msg) => console.log(`${colors.green}‚úÖ ${msg}${colors.reset}`),
-  warn: (msg) => console.warn(`${colors.yellow}‚ö†Ô∏è  ${msg}${colors.reset}`),
-  info: (msg) => console.log(`${colors.blue}‚ÑπÔ∏è  ${msg}${colors.reset}`),
-  header: (msg) => console.log(`\n${colors.bold}${colors.blue}üîê ${msg}${colors.reset}\n`)
+  error: (msg) => console.error(`${colors.red}? ${msg}${colors.reset}`),
+  success: (msg) => console.log(`${colors.green}? ${msg}${colors.reset}`),
+  warn: (msg) => console.warn(`${colors.yellow}??  ${msg}${colors.reset}`),
+  info: (msg) => console.log(`${colors.blue}??  ${msg}${colors.reset}`),
+  header: (msg) => console.log(`\n${colors.bold}${colors.cyan}?? ${msg}${colors.reset}\n`)
 };
 
-// üîç Funci√≥n de validaci√≥n principal
+// ?? FunciÛn de validaciÛn de una variable
 function validateVar({ name, pattern, minLen, maxLen, allowed, optional, error }, value, envName) {
+  // Caso 1: Variable no definida
   if (!value) {
-    if (optional) return { valid: true, warning: `Variable opcional '${name}' no definida` };
-    return { valid: false, error: `‚ùå ${envName}: '${name}' NO est√° definida. ${error || 'Requerida'}` };
+    if (optional) {
+      return { valid: true, warning: `Variable opcional '${name}' no definida` };
+    }
+    return { valid: false, error: `? ${envName}: '${name}' NO est· definida. ${error || 'Requerida'}` };
   }
 
+  // Caso 2: Validar patrÛn regex
   if (pattern && !pattern.test(value)) {
-    return { valid: false, error: `‚ùå ${envName}: '${name}' tiene formato inv√°lido. ${error}` };
+    return { valid: false, error: `? ${envName}: '${name}' tiene formato inv·lido. ${error}` };
   }
 
+  // Caso 3: Longitud mÌnima
   if (minLen && value.length < minLen) {
-    return { valid: false, error: `‚ùå ${envName}: '${name}' es muy corta (m√≠n. ${minLen} chars)` };
+    return { valid: false, error: `? ${envName}: '${name}' es muy corta (mÌn. ${minLen} chars, actual: ${value.length})` };
   }
 
+  // Caso 4: Longitud m·xima
   if (maxLen && value.length > maxLen) {
-    return { valid: false, error: `‚ùå ${envName}: '${name}' es muy larga (m√°x. ${maxLen} chars)` };
+    return { valid: false, error: `? ${envName}: '${name}' es muy larga (m·x. ${maxLen} chars, actual: ${value.length})` };
   }
 
+  // Caso 5: Valores permitidos especÌficos
   if (allowed && !allowed.includes(value)) {
-    return { valid: false, error: `‚ùå ${envName}: '${name}' debe ser una de: ${allowed.join(', ')}` };
+    return { valid: false, error: `? ${envName}: '${name}' debe ser una de: ${allowed.join(', ')}` };
   }
 
-  // ‚ö†Ô∏è Warning para valores por defecto peligrosos
-  const dangerousDefaults = ['secret', 'change-me', 'test', 'dev', 'localhost', 'geomeasure-secret'];
-  if (dangerousDefaults.some(def => value.toLowerCase().includes(def))) {
-    return { valid: false, error: `‚ùå ${envName}: '${name}' usa un valor por defecto INSEGURO. ¬°C√°mbialo!` };
+  // ?? Warning para valores por defecto peligrosos (anti-patterns de seguridad)
+  const dangerousDefaults = [
+    'secret', 'change-me', 'change_me', 'changeme', 
+    'test', 'dev', 'localhost', 'example', 
+    'geomeasure-secret', 'my-secret', 'jwt-secret',
+    'your_', 'your-', 'replace', 'todo'
+  ];
+  
+  const lowerValue = value.toLowerCase();
+  if (dangerousDefaults.some(def => lowerValue.includes(def))) {
+    return { 
+      valid: false, 
+      error: `? ${envName}: '${name}' usa un valor por defecto INSEGURO ("${value}"). °Genera uno ˙nico!` 
+    };
   }
 
+  // ? Todo correcto
   return { valid: true };
 }
 
-// üöÄ Ejecutar validaci√≥n
+// ?? Escanear cÛdigo frontend en busca de secretos expuestos (heurÌstica b·sica)
+function scanForExposedSecrets(rootDir) {
+  const riskyPatterns = [
+    { pattern: /AIza[0-9A-Za-z\-_]{35}/, name: 'Google API Key' },
+    { pattern: /sk-[a-zA-Z0-9]{40,}/, name: 'OpenAI/Gemini Key' },
+    { pattern: /ghp_[a-zA-Z0-9]{36}/, name: 'GitHub Token' },
+    { pattern: /JWT_SECRET\s*=\s*['"][^'"]+['"]/i, name: 'JWT Secret hardcodeado' },
+    // ? Solo alerta si hay claves de BD o APIs sensibles escritas literalmente
+    { pattern: /(DATABASE_URL|MONGODB_URI|SUPABASE_KEY|FIREBASE_SECRET)\s*[=:]\s*['"][^'"]+['"]/i, name: 'Credencial de DB/Backend expuesta' }
+  ];
+
+  const results = [];
+  
+  // Escanear archivos especÌficos que suelen contener configuraciÛn
+  const filesToScan = [
+    join(rootDir, 'vite.config.ts'),
+    join(rootDir, 'vite.config.js'),
+    join(rootDir, 'src', 'config', 'env.ts'),
+    join(rootDir, 'src', 'main.tsx'),
+    join(rootDir, 'src', 'main.jsx')
+  ];
+
+  for (const filePath of filesToScan) {
+    if (!existsSync(filePath)) continue;
+    
+    try {
+      const content = readFileSync(filePath, 'utf8');
+      const relativePath = filePath.replace(rootDir + '/', '');
+      
+      for (const { pattern, name } of riskyPatterns) {
+        if (pattern.test(content)) {
+          results.push({ file: relativePath, secret: name });
+        }
+      }
+    } catch (e) {
+      // Ignorar errores de lectura
+    }
+  }
+  
+  return results;
+}
+
+// ?? FunciÛn principal de ejecuciÛn
 async function main() {
+  // Parsear argumentos de lÌnea de comandos
   const args = Object.fromEntries(
-    process.argv.slice(2).map(arg => arg.split('=')).map(([k, v]) => [k.replace('--', ''), v])
+    process.argv.slice(2)
+      .map(arg => arg.split('='))
+      .map(([k, v]) => [k.replace('--', ''), v || true])
   );
   
   const mode = args.mode || 'all';
-  const isCI = process.env.CI === 'true' || process.env.NETLIFY === 'true' || process.env.RENDER === 'true';
+  const isCI = process.env.CI === 'true' || 
+               process.env.NETLIFY === 'true' || 
+               process.env.RENDER === 'true' ||
+               process.env.GITHUB_ACTIONS === 'true';
   
-  log.header(`Validaci√≥n de Seguridad Pre-Deploy [${mode.toUpperCase()}]`);
-  if (isCI) log.info('ü§ñ Ejecutando en entorno CI/CD');
+  log.header(`ValidaciÛn de Seguridad Pre-Deploy [${mode.toUpperCase()}]`);
+  if (isCI) log.info('?? Ejecutando en entorno CI/CD');
 
   let hasErrors = false;
   const results = [];
 
-  // Validar seg√∫n modo
+  // Determinar quÈ entornos validar
   const modesToValidate = mode === 'all' ? ['frontend', 'backend'] : [mode];
 
   for (const envType of modesToValidate) {
     const vars = CRITICAL_VARS[envType];
-    if (!vars) continue;
+    if (!vars) {
+      log.warn(`Modo '${envType}' no reconocido. Modos v·lidos: frontend, backend, all`);
+      continue;
+    }
 
     log.info(`Validando variables para ${envType.toUpperCase()}...`);
     
@@ -118,32 +234,25 @@ async function main() {
     }
   }
 
-  // üîé Check adicional: detectar secretos expuestos en c√≥digo
+  // ?? Check adicional: detectar secretos expuestos en cÛdigo frontend
   if (mode === 'all' || mode === 'frontend') {
     log.info('Escaneando frontend en busca de secretos expuestos...');
-    const riskyPatterns = [
-      { pattern: /AIza[0-9A-Za-z\-_]{35}/, name: 'Google API Key' },
-      { pattern: /sk-[a-zA-Z0-9]{48}/, name: 'OpenAI/Gemini Key' },
-      { pattern: /ghp_[a-zA-Z0-9]{36}/, name: 'GitHub Token' },
-      { pattern: /JWT_SECRET\s*=\s*['"][^'"]+['"]/i, name: 'Hardcoded JWT Secret' }
-    ];
-
-    try {
-      const viteConfig = readFileSync(join(rootDir, 'vite.config.ts'), 'utf8');
-      for (const { pattern, name } of riskyPatterns) {
-        if (pattern.test(viteConfig)) {
-          log.error(`üî¥ Secreto detectado en vite.config.ts: ${name}`);
-          hasErrors = true;
-        }
-      }
-    } catch (e) {
-      log.warn('No se pudo leer vite.config.ts para escaneo');
+    const exposed = scanForExposedSecrets(rootDir);
+    
+    if (exposed.length > 0) {
+      log.error(`?? Se detectaron ${exposed.length} posible(s) secreto(s) expuesto(s):`);
+      exposed.forEach(({ file, secret }) => {
+        log.error(`   ï ${secret} en ${file}`);
+      });
+      hasErrors = true;
+    } else {
+      log.success('? No se detectaron secretos expuestos en cÛdigo frontend');
     }
   }
 
-  // üìä Resumen final
-  console.log('\n' + '‚îÄ'.repeat(60));
-  log.header('Resumen de Validaci√≥n');
+  // ?? Resumen final
+  console.log('\n' + '-'.repeat(70));
+  log.header('Resumen de ValidaciÛn');
   
   const stats = {
     ok: results.filter(r => r.status === 'OK').length,
@@ -151,30 +260,52 @@ async function main() {
     fail: results.filter(r => r.status === 'FAIL').length
   };
 
-  console.log(`‚úÖ Exitosas: ${stats.ok}`);
-  console.log(`‚ö†Ô∏è  Advertencias: ${stats.warn}`);
-  console.log(`‚ùå Errores: ${stats.fail}`);
-  console.log('‚îÄ'.repeat(60) + '\n');
+  console.log(`${colors.green}? Exitosas:${colors.reset} ${stats.ok}`);
+  console.log(`${colors.yellow}??  Advertencias:${colors.reset} ${stats.warn}`);
+  console.log(`${colors.red}? Errores:${colors.reset} ${stats.fail}`);
+  console.log('-'.repeat(70) + '\n');
 
+  // ?? Mensajes de ayuda contextual
   if (hasErrors) {
-    log.error('üö´ VALIDACI√ìN FALLIDA: No se puede proceder con el deploy.');
-    log.info('üí° Soluci√≥n: Configura las variables faltantes en:');
-    log.info('   ‚Ä¢ Frontend (Netlify): Site settings > Environment variables');
-    log.info('   ‚Ä¢ Backend (Render): Dashboard > Environment');
+    log.error('?? VALIDACI”N FALLIDA: No se puede proceder con el deploy.');
+    log.info('?? Soluciones:');
+    if (modesToValidate.includes('frontend')) {
+      log.info('   ï Frontend (Netlify): Site settings ? Build & deploy ? Environment variables');
+      log.info('   ï Local: Crea .env.local con VITE_API_BASE_URL=https://tu-backend.com');
+    }
+    if (modesToValidate.includes('backend')) {
+      log.info('   ï Backend (Render): Dashboard ? Environment ? Add Variable');
+      log.info('   ï Genera JWT_SECRET segura: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+    }
     process.exit(1);
   } else {
-    log.success('‚úÖ Todas las validaciones pasaron. ¬°Listo para deploy! üöÄ');
+    if (stats.warn > 0) {
+      log.warn('??  ValidaciÛn completada con advertencias. Revisa las variables opcionales.');
+    } else {
+      log.success('? Todas las validaciones pasaron. °Listo para deploy! ??');
+    }
     process.exit(0);
   }
 }
 
-// Manejar errores no capturados
+// ??? Manejo de errores no capturados
 process.on('uncaughtException', (err) => {
   log.error(`Error inesperado: ${err.message}`);
+  log.info('?? Ejecuta con DEBUG=* para m·s detalles');
   process.exit(2);
 });
 
+process.on('unhandledRejection', (reason) => {
+  log.error(`Promesa rechazada: ${reason}`);
+  process.exit(2);
+});
+
+// Ejecutar
 main().catch(err => {
-  log.error(`Fallo en validaci√≥n: ${err.message}`);
+  log.error(`Fallo en ejecuciÛn: ${err.message}`);
+  if (err.stack) {
+    log.info('Stack trace:');
+    console.error(err.stack);
+  }
   process.exit(2);
 });
