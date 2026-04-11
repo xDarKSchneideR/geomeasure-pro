@@ -5,7 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
+    "build": "npm run validate:frontend && vite build",
+    "build:backend": "npm run validate:backend && cd server && npm run build",
+    
+    "validate": "node scripts/validate-env.mjs --mode=all",
+    "validate:frontend": "node scripts/validate-env.mjs --mode=frontend",
+    "validate:backend": "node scripts/validate-env.mjs --mode=backend",
+    
+    "predeploy:netlify": "npm run validate:frontend",
+    "predeploy:render": "npm run validate:backend",
+    
+    "security:audit": "npm audit --audit-level=high",
+    "security:check": "npm run validate && npm run security:audit",
+    
     "preview": "vite preview",
     "server": "npx tsx server/index.ts",
     "start": "npm run server",

@@ -7,8 +7,9 @@ dist/
 # Logs
 *.log
 
-# Environment variables
+# Environment variables (except .env.example for templates)
 .env*
+!.env.example
 
 # OS files
 .DS_Store
