@@ -1,5 +1,5 @@
 [build]
-  command = "npm run validate:frontend && npm run build"
+  command = "npm run build:netlify"
   publish = "dist"
 
 # Ejecutar validación de seguridad en cada deploy
@@ -10,7 +10,7 @@
 [[plugins]]
   package = "@netlify/plugin-lighthouse"
 
-# Headers de seguridad (como te envié antes)
+# Headers de seguridad
 [[headers]]
   for = "/*"
   [headers.values]
