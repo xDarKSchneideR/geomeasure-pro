@@ -1,9 +1,9 @@
 /**
  * validate-env.mjs
- * Valida variables de entorno críticas antes del deploy
+ * Valida variables de entorno crï¿½ticas antes del deploy
  * Uso: node scripts/validate-env.mjs --mode=frontend|backend|all
  * 
- * ? Carga automática de .env.local (sin necesidad de instalar dotenv)
+ * ? Carga automï¿½tica de .env.local (sin necesidad de instalar dotenv)
  */
 
 import { readFileSync, existsSync } from 'fs';
@@ -13,14 +13,14 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 
-// ?? Cargar .env.local automáticamente (sin instalar dotenv)
+// ?? Cargar .env.local automï¿½ticamente (sin instalar dotenv)
 // Esto permite que el script funcione en local sin variables globales
 const envPath = join(rootDir, '.env.local');
 if (existsSync(envPath)) {
   const envContent = readFileSync(envPath, 'utf8');
   envContent.split('\n').forEach(line => {
     line = line.trim();
-    // Ignorar líneas vacías y comentarios
+    // Ignorar lï¿½neas vacï¿½as y comentarios
     if (line && !line.startsWith('#')) {
       const eqIndex = line.indexOf('=');
       if (eqIndex !== -1) {
@@ -37,14 +37,14 @@ if (existsSync(envPath)) {
   });
 }
 
-// ?? Variables CRÍTICAS por entorno
+// ?? Variables CRï¿½TICAS por entorno
 const CRITICAL_VARS = {
   frontend: [
-    // ?? Estas NO deben contener secretos reales - solo configuración pública
+    // ?? Estas NO deben contener secretos reales - solo configuraciï¿½n pï¿½blica
     { 
       name: 'VITE_API_BASE_URL', 
       pattern: /^https:\/\//, 
-      error: 'Debe ser una URL HTTPS válida (ej: https://tu-api.onrender.com)' 
+      error: 'Debe ser una URL HTTPS vï¿½lida (ej: https://tu-api.onrender.com)' 
     },
     { name: 'VITE_MAP_TILE_URL', optional: true }
   ],
@@ -57,16 +57,11 @@ const CRITICAL_VARS = {
     { 
       name: 'DATABASE_URL', 
       pattern: /^postgresql:\/\//, 
-      error: 'Debe ser una conexión PostgreSQL válida (Neon/Render)' 
-    },
-    { 
-      name: 'GEMINI_API_KEY', 
-      minLen: 20, 
-      error: 'Clave de Gemini inválida - NUNCA exponer al frontend' 
+      error: 'Debe ser una conexiÃ³n PostgreSQL vÃ¡lida (Neon/Render)' 
     },
     { 
       name: 'NODE_ENV', 
-      allowed: ['production', 'staging', 'development'], 
+      allowed: ['production', 'staging', 'development'],
       error: 'Debe ser "production", "staging" o "development"' 
     },
     { name: 'PORT', optional: true }
@@ -92,32 +87,32 @@ const log = {
   header: (msg) => console.log(`\n${colors.bold}${colors.cyan}?? ${msg}${colors.reset}\n`)
 };
 
-// ?? Función de validación de una variable
+// ?? Funciï¿½n de validaciï¿½n de una variable
 function validateVar({ name, pattern, minLen, maxLen, allowed, optional, error }, value, envName) {
   // Caso 1: Variable no definida
   if (!value) {
     if (optional) {
       return { valid: true, warning: `Variable opcional '${name}' no definida` };
     }
-    return { valid: false, error: `? ${envName}: '${name}' NO está definida. ${error || 'Requerida'}` };
+    return { valid: false, error: `? ${envName}: '${name}' NO estï¿½ definida. ${error || 'Requerida'}` };
   }
 
-  // Caso 2: Validar patrón regex
+  // Caso 2: Validar patrï¿½n regex
   if (pattern && !pattern.test(value)) {
-    return { valid: false, error: `? ${envName}: '${name}' tiene formato inválido. ${error}` };
+    return { valid: false, error: `? ${envName}: '${name}' tiene formato invï¿½lido. ${error}` };
   }
 
-  // Caso 3: Longitud mínima
+  // Caso 3: Longitud mï¿½nima
   if (minLen && value.length < minLen) {
-    return { valid: false, error: `? ${envName}: '${name}' es muy corta (mín. ${minLen} chars, actual: ${value.length})` };
+    return { valid: false, error: `? ${envName}: '${name}' es muy corta (mï¿½n. ${minLen} chars, actual: ${value.length})` };
   }
 
-  // Caso 4: Longitud máxima
+  // Caso 4: Longitud mï¿½xima
   if (maxLen && value.length > maxLen) {
-    return { valid: false, error: `? ${envName}: '${name}' es muy larga (máx. ${maxLen} chars, actual: ${value.length})` };
+    return { valid: false, error: `? ${envName}: '${name}' es muy larga (mï¿½x. ${maxLen} chars, actual: ${value.length})` };
   }
 
-  // Caso 5: Valores permitidos específicos
+  // Caso 5: Valores permitidos especï¿½ficos
   if (allowed && !allowed.includes(value)) {
     return { valid: false, error: `? ${envName}: '${name}' debe ser una de: ${allowed.join(', ')}` };
   }
@@ -134,7 +129,7 @@ function validateVar({ name, pattern, minLen, maxLen, allowed, optional, error }
   if (dangerousDefaults.some(def => lowerValue.includes(def))) {
     return { 
       valid: false, 
-      error: `? ${envName}: '${name}' usa un valor por defecto INSEGURO ("${value}"). ¡Genera uno único!` 
+      error: `? ${envName}: '${name}' usa un valor por defecto INSEGURO ("${value}"). ï¿½Genera uno ï¿½nico!` 
     };
   }
 
@@ -142,7 +137,7 @@ function validateVar({ name, pattern, minLen, maxLen, allowed, optional, error }
   return { valid: true };
 }
 
-// ?? Escanear código frontend en busca de secretos expuestos (heurística básica)
+// ?? Escanear cï¿½digo frontend en busca de secretos expuestos (heurï¿½stica bï¿½sica)
 function scanForExposedSecrets(rootDir) {
   const riskyPatterns = [
     { pattern: /AIza[0-9A-Za-z\-_]{35}/, name: 'Google API Key' },
@@ -155,7 +150,7 @@ function scanForExposedSecrets(rootDir) {
 
   const results = [];
   
-  // Escanear archivos específicos que suelen contener configuración
+  // Escanear archivos especï¿½ficos que suelen contener configuraciï¿½n
   const filesToScan = [
     join(rootDir, 'vite.config.ts'),
     join(rootDir, 'vite.config.js'),
@@ -184,9 +179,9 @@ function scanForExposedSecrets(rootDir) {
   return results;
 }
 
-// ?? Función principal de ejecución
+// ?? Funciï¿½n principal de ejecuciï¿½n
 async function main() {
-  // Parsear argumentos de línea de comandos
+  // Parsear argumentos de lï¿½nea de comandos
   const args = Object.fromEntries(
     process.argv.slice(2)
       .map(arg => arg.split('='))
@@ -199,19 +194,19 @@ async function main() {
                process.env.RENDER === 'true' ||
                process.env.GITHUB_ACTIONS === 'true';
   
-  log.header(`Validación de Seguridad Pre-Deploy [${mode.toUpperCase()}]`);
+  log.header(`Validaciï¿½n de Seguridad Pre-Deploy [${mode.toUpperCase()}]`);
   if (isCI) log.info('?? Ejecutando en entorno CI/CD');
 
   let hasErrors = false;
   const results = [];
 
-  // Determinar qué entornos validar
+  // Determinar quï¿½ entornos validar
   const modesToValidate = mode === 'all' ? ['frontend', 'backend'] : [mode];
 
   for (const envType of modesToValidate) {
     const vars = CRITICAL_VARS[envType];
     if (!vars) {
-      log.warn(`Modo '${envType}' no reconocido. Modos válidos: frontend, backend, all`);
+      log.warn(`Modo '${envType}' no reconocido. Modos vï¿½lidos: frontend, backend, all`);
       continue;
     }
 
@@ -234,7 +229,7 @@ async function main() {
     }
   }
 
-  // ?? Check adicional: detectar secretos expuestos en código frontend
+  // ?? Check adicional: detectar secretos expuestos en cï¿½digo frontend
   if (mode === 'all' || mode === 'frontend') {
     log.info('Escaneando frontend en busca de secretos expuestos...');
     const exposed = scanForExposedSecrets(rootDir);
@@ -242,17 +237,17 @@ async function main() {
     if (exposed.length > 0) {
       log.error(`?? Se detectaron ${exposed.length} posible(s) secreto(s) expuesto(s):`);
       exposed.forEach(({ file, secret }) => {
-        log.error(`   • ${secret} en ${file}`);
+        log.error(`   ï¿½ ${secret} en ${file}`);
       });
       hasErrors = true;
     } else {
-      log.success('? No se detectaron secretos expuestos en código frontend');
+      log.success('? No se detectaron secretos expuestos en cï¿½digo frontend');
     }
   }
 
   // ?? Resumen final
   console.log('\n' + '-'.repeat(70));
-  log.header('Resumen de Validación');
+  log.header('Resumen de Validaciï¿½n');
   
   const stats = {
     ok: results.filter(r => r.status === 'OK').length,
@@ -267,22 +262,22 @@ async function main() {
 
   // ?? Mensajes de ayuda contextual
   if (hasErrors) {
-    log.error('?? VALIDACIÓN FALLIDA: No se puede proceder con el deploy.');
+    log.error('?? VALIDACIï¿½N FALLIDA: No se puede proceder con el deploy.');
     log.info('?? Soluciones:');
     if (modesToValidate.includes('frontend')) {
-      log.info('   • Frontend (Netlify): Site settings ? Build & deploy ? Environment variables');
-      log.info('   • Local: Crea .env.local con VITE_API_BASE_URL=https://tu-backend.com');
+      log.info('   ï¿½ Frontend (Netlify): Site settings ? Build & deploy ? Environment variables');
+      log.info('   ï¿½ Local: Crea .env.local con VITE_API_BASE_URL=https://tu-backend.com');
     }
     if (modesToValidate.includes('backend')) {
-      log.info('   • Backend (Render): Dashboard ? Environment ? Add Variable');
-      log.info('   • Genera JWT_SECRET segura: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+      log.info('   ï¿½ Backend (Render): Dashboard ? Environment ? Add Variable');
+      log.info('   ï¿½ Genera JWT_SECRET segura: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
     }
     process.exit(1);
   } else {
     if (stats.warn > 0) {
-      log.warn('??  Validación completada con advertencias. Revisa las variables opcionales.');
+      log.warn('??  Validaciï¿½n completada con advertencias. Revisa las variables opcionales.');
     } else {
-      log.success('? Todas las validaciones pasaron. ¡Listo para deploy! ??');
+      log.success('? Todas las validaciones pasaron. ï¿½Listo para deploy! ??');
     }
     process.exit(0);
   }
@@ -291,7 +286,7 @@ async function main() {
 // ??? Manejo de errores no capturados
 process.on('uncaughtException', (err) => {
   log.error(`Error inesperado: ${err.message}`);
-  log.info('?? Ejecuta con DEBUG=* para más detalles');
+  log.info('?? Ejecuta con DEBUG=* para mï¿½s detalles');
   process.exit(2);
 });
 
@@ -302,7 +297,7 @@ process.on('unhandledRejection', (reason) => {
 
 // Ejecutar
 main().catch(err => {
-  log.error(`Fallo en ejecución: ${err.message}`);
+  log.error(`Fallo en ejecuciï¿½n: ${err.message}`);
   if (err.stack) {
     log.info('Stack trace:');
     console.error(err.stack);
