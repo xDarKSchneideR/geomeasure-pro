@@ -1249,31 +1249,82 @@ export default function App() {
     e.target.value = '';
   };
 
-  const handleExportImage = async () => {
+const handleExportImage = async () => {
     if (!mapContainerRef.current) return;
     
-    const confirmed = confirm(
-      '¿Exportar mapa como imagen?\n\n' +
-      '- Se capturará el área visible del mapa\n' +
-      '- Se incluirá el fondo del mapa que estés usando\n' +
-      '- Se descargará una imagen PNG'
-    );
-    if (!confirmed) return;
-    
     setIsExportingImage(true);
+    
     try {
-      // Wait a bit for map to stabilize
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // 1. OCULTAR elementos de UI que tapan el mapa
+      // Encontrar elementos por su posición en el DOM
+      const appContainer = document.querySelector('.flex.flex-col.h-screen');
+      const allElements = appContainer?.querySelectorAll('*') || [];
       
+      // Guardar y ocultar elementos que no son el mapa
+      const elementsToHide: HTMLElement[] = [];
+      allElements.forEach((el) => {
+        const elem = el as HTMLElement;
+        // Ocultar: header, aside (sidebar), botones, toolbars
+        if (
+          elem.tagName === 'HEADER' ||
+          elem.tagName === 'ASIDE' ||
+          (elem.tagName === 'DIV' && (
+            elem.classList?.contains('fixed') ||
+            elem.classList?.contains('shadow-2xl') ||
+            elem.classList?.contains('bg-white')
+          )) ||
+          elem.tagName === 'BUTTON'
+        ) {
+          // Solo ocultar los que están encima del mapa (no el mapa mismo)
+          if (elem !== mapContainerRef.current && 
+              !elem.classList?.contains('leaflet-container')) {
+            elementsToHide.push(elem);
+          }
+        }
+      });
+      
+      // Ocultar todos los elementos
+      elementsToHide.forEach(el => {
+        el.style.visibility = 'hidden';
+      });
+      
+      // 2. Pequenya espera para que se aplique el cambio
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 3. CAPTURAR
       const dataUrl = await toPng(mapContainerRef.current, {
         cacheBust: true,
         filter: (node) => {
-          // Filter out controls if needed, but usually we want them
+          // Excluir elementos de UI que no queremos en la captura
+          const excludeClasses = [
+            'leaflet-control-attribution',
+            'leaflet-control-zoom',
+            'leaflet-control-layers',
+            'bg-white', // toolbar flotante
+            'shadow-2xl', // botones flotantes
+            'fixed', // elementos fixed
+          ];
+          for (const cls of excludeClasses) {
+            if (node.classList?.contains(cls)) return false;
+          }
+          // Excluir elementos del header
+          if (node.tagName === 'HEADER') return false;
+          // Excluir botones
+          if (node.tagName === 'BUTTON') return false;
           return true;
         }
       });
       
-      saveAs(dataUrl, `mapa-${new Date().toISOString().split('T')[0]}.png`);
+      // 4. RESTAURAR visibilidad
+      elementsToHide.forEach(el => {
+        el.style.visibility = '';
+      });
+      
+      const fileName = `mapa-${new Date().toISOString().split('T')[0]}.png`;
+      
+      // Descargar directamente
+      saveAs(dataUrl, fileName);
+      alert('Imagen guardada correctamente');
     } catch (err) {
       console.error('Error al exportar imagen:', err);
       alert('Error al exportar la imagen del mapa.');
@@ -1535,9 +1586,18 @@ export default function App() {
                     <Layers className="w-4 h-4 text-blue-600" />
                     Capas y Zonas
                   </h2>
-                  <button onClick={() => setSidebarOpen(false)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
-                    <X className="w-5 h-5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={() => setShowHelpModal(true)}
+                      className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"
+                      title="Ayuda"
+                    >
+                      <HelpCircle className="w-5 h-5" />
+                    </button>
+                    <button onClick={() => setSidebarOpen(false)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="relative">
@@ -1987,20 +2047,12 @@ export default function App() {
                       onClick={() => { loadCloudProjects(); setShowProjectsModal(true); }}
                       className="flex-1 bg-blue-600 border border-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                     >
-                      <Database className="w-3 h-3" />
+<Database className="w-3 h-3" />
                       Nube
                     </button>
                   )}
-                  <button 
-                    onClick={handleExportImage}
-                    disabled={isExportingImage}
-                    className={`flex-1 bg-white border border-slate-200 text-slate-700 px-3 py-2 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 ${isExportingImage ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    <MapIcon className="w-3 h-3" />
-                    {isExportingImage ? 'Exportando...' : 'Imagen'}
-                  </button>
                 </div>
-                <input 
+                <input
                   type="file" 
                   ref={projectInputRef} 
                   onChange={handleImportProject} 
@@ -2247,15 +2299,6 @@ export default function App() {
                     icon={<Layers className="w-5 h-5 text-slate-600" />}
                     label="Tipo de Mapa"
                   />
-                  <ToolButton 
-                    active={false} 
-                    onClick={() => {
-                      setShowHelpModal(true);
-                      setState(prev => ({ ...prev, isToolsExpanded: false }));
-                    }}
-                    icon={<HelpCircle className="w-5 h-5 text-slate-600" />}
-                    label="Ayuda"
-                  />
                   <div className="h-px bg-slate-100 mx-2 my-1"></div>
                   <ToolButton 
                     active={state.drawMode === 'polygon'} 
@@ -2281,6 +2324,12 @@ export default function App() {
                     onClick={() => setState(prev => ({ ...prev, isEditing: !prev.isEditing, isDrawing: false, drawMode: null, isToolsExpanded: false }))}
                     icon={<Edit3 className="w-5 h-5" />}
                     label="Editar Geometría"
+                  />
+                  <ToolButton 
+                    active={false} 
+                    onClick={handleExportImage}
+                    icon={<MapIcon className="w-5 h-5" />}
+                    label="Capturar Imagen"
                   />
                   <div className="h-px bg-slate-100 mx-2 my-1"></div>
                   <ToolButton 
