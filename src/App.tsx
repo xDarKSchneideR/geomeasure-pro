@@ -1255,74 +1255,45 @@ const handleExportImage = async () => {
     setIsExportingImage(true);
     
     try {
-      // 1. OCULTAR elementos de UI que tapan el mapa
-      // Encontrar elementos por su posición en el DOM
-      const appContainer = document.querySelector('.flex.flex-col.h-screen');
-      const allElements = appContainer?.querySelectorAll('*') || [];
+      // Ocultar la barra de herramientas flotante
+      const toolbarContainer = document.getElementById('floating-toolbar-container');
+      const toolbarWasVisible = toolbarContainer ? (toolbarContainer as HTMLElement).style.display : null;
+      if (toolbarContainer) {
+        (toolbarContainer as HTMLElement).style.display = 'none';
+      }
       
-      // Guardar y ocultar elementos que no son el mapa
-      const elementsToHide: HTMLElement[] = [];
-      allElements.forEach((el) => {
-        const elem = el as HTMLElement;
-        // Ocultar: header, aside (sidebar), botones, toolbars
-        if (
-          elem.tagName === 'HEADER' ||
-          elem.tagName === 'ASIDE' ||
-          (elem.tagName === 'DIV' && (
-            elem.classList?.contains('fixed') ||
-            elem.classList?.contains('shadow-2xl') ||
-            elem.classList?.contains('bg-white')
-          )) ||
-          elem.tagName === 'BUTTON'
-        ) {
-          // Solo ocultar los que están encima del mapa (no el mapa mismo)
-          if (elem !== mapContainerRef.current && 
-              !elem.classList?.contains('leaflet-container')) {
-            elementsToHide.push(elem);
-          }
-        }
-      });
+      // También ocultar el sidebar si está abierto
+      const sidebar = document.querySelector('aside');
+      const sidebarWasVisible = sidebar ? (sidebar as HTMLElement).style.display : null;
+      if (sidebar && !(sidebar as HTMLElement).classList.contains('hidden')) {
+        (sidebar as HTMLElement).style.display = 'none';
+      }
       
-      // Ocultar todos los elementos
-      elementsToHide.forEach(el => {
-        el.style.visibility = 'hidden';
-      });
-      
-      // 2. Pequenya espera para que se aplique el cambio
+      // Pequeña espera
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // 3. CAPTURAR
+      // Capturar
       const dataUrl = await toPng(mapContainerRef.current, {
         cacheBust: true,
         filter: (node) => {
-          // Excluir elementos de UI que no queremos en la captura
-          const excludeClasses = [
-            'leaflet-control-attribution',
-            'leaflet-control-zoom',
-            'leaflet-control-layers',
-            'bg-white', // toolbar flotante
-            'shadow-2xl', // botones flotantes
-            'fixed', // elementos fixed
-          ];
-          for (const cls of excludeClasses) {
-            if (node.classList?.contains(cls)) return false;
+          if (node.classList?.contains('leaflet-control-attribution')) {
+            return false;
           }
-          // Excluir elementos del header
-          if (node.tagName === 'HEADER') return false;
-          // Excluir botones
-          if (node.tagName === 'BUTTON') return false;
           return true;
         }
       });
       
-      // 4. RESTAURAR visibilidad
-      elementsToHide.forEach(el => {
-        el.style.visibility = '';
-      });
+      // Restaurar toolbar
+      if (toolbarContainer) {
+        (toolbarContainer as HTMLElement).style.display = toolbarWasVisible || '';
+      }
+      // Restaurar sidebar
+      if (sidebar) {
+        (sidebar as HTMLElement).style.display = sidebarWasVisible || '';
+      }
       
       const fileName = `mapa-${new Date().toISOString().split('T')[0]}.png`;
       
-      // Descargar directamente
       saveAs(dataUrl, fileName);
       alert('Imagen guardada correctamente');
     } catch (err) {
@@ -2266,6 +2237,7 @@ const handleExportImage = async () => {
 
           {/* Floating Toolbar - Redesigned as a collapsible menu for better mobile experience */}
           <div 
+            id="floating-toolbar-container"
             className="absolute top-36 right-4 flex flex-col items-end gap-2 z-[1001]"
             onClick={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
