@@ -36,7 +36,7 @@ export interface AppState {
   groups: GeoGroup[];
   wmsLayers: WMSLayer[];
   selectedZoneId: string | null;
-  selectedGroupId: string | null;
+  selectedGroupIds: string[];
   isDrawing: boolean;
   isEditing: boolean;
   drawMode: 'polygon' | 'polyline' | 'point' | null;

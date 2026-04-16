@@ -4,7 +4,7 @@ import { area as turfArea, length as turfLength, polygon as turfPolygon, lineStr
 import { GeoZone, GeoGroup } from '../types';
 
 // Comprimir imagen a base64 con calidad reducida para ahorrar espacio
-export const compressImage = (file: File, maxWidth: number = 800, quality: number = 0.6): Promise<string> => {
+export const compressImage = (file: File, maxWidth: number = 800, quality: number = 0.75): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -31,7 +31,7 @@ export const compressImage = (file: File, maxWidth: number = 800, quality: numbe
 
         // Draw image with smoothing
         ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'medium';
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
         // Compress to JPEG with reduced quality

@@ -8,17 +8,13 @@
     "build": "vite build",
     "build:netlify": "npm run validate:frontend && vite build",
     "build:render": "npm run validate:backend && cd server && npm run build",
-    
     "validate": "node scripts/validate-env.mjs --mode=all",
     "validate:frontend": "node scripts/validate-env.mjs --mode=frontend",
     "validate:backend": "node scripts/validate-env.mjs --mode=backend",
-    
     "predeploy:netlify": "npm run validate:frontend",
     "predeploy:render": "npm run validate:backend",
-    
     "security:audit": "npm audit --audit-level=high",
     "security:check": "npm run validate && npm run security:audit",
-    
     "preview": "vite preview",
     "server": "npx tsx server/index.ts",
     "start": "npm run server",
@@ -41,6 +37,7 @@
     "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
+    "leaflet-rotate": "^0.2.8",
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",

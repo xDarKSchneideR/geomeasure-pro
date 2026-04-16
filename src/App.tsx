@@ -13,6 +13,8 @@ import {
   ZoomControl
 } from 'react-leaflet';
 import * as L_raw from 'leaflet';
+import type { Layer, LeafletMouseEvent } from 'leaflet';
+import 'leaflet-rotate'; // Plugin para rotar el mapa (gestos + teclado)
 import { centroid as turfCentroid, polygon as turfPolygon, lineString as turfLineString } from '@turf/turf';
 import MarkerClusterGroup_raw from 'react-leaflet-cluster';
 import { 
@@ -59,7 +61,9 @@ import {
   Layers as LayersIcon,
   Wrench,
   LogIn,
-  LogOut
+  LogOut,
+  Cloud,
+  Compass
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toPng, toJpeg } from 'html-to-image';
@@ -80,6 +84,11 @@ import {
 
 // Handle Leaflet ESM import issues
 const L = (L_raw as any).default || L_raw;
+// Helper to apply bearing via CSS transform
+const applyBearing = (bearing: number, setBearing: (b: number) => void) => {
+  const normalized = ((bearing % 360) + 360) % 360;
+  setBearing(normalized);
+};
 const MarkerClusterGroup = (MarkerClusterGroup_raw as any).default || MarkerClusterGroup_raw;
 
 // Fix Leaflet default icon issue
@@ -120,22 +129,24 @@ const getZoneCenter = (zone: GeoZone): [number, number] => {
 };
 
 // Memoized Zone Layer Component for Performance
-const ZoneLayer = React.memo(({ 
-  zone, 
-  isSelected, 
+const ZoneLayer = React.memo(({
+  zone,
+  isSelected,
   isMultiSelected,
-  isEditing, 
-  onSelect, 
+  isEditing,
+  onSelect,
   onUpdateGeometry,
-  layerRef
-}: { 
-  zone: GeoZone; 
-  isSelected: boolean; 
+  layerRef,
+  onImageClick
+}: {
+  zone: GeoZone;
+  isSelected: boolean;
   isMultiSelected: boolean;
-  isEditing: boolean; 
+  isEditing: boolean;
   onSelect: (id: string) => void;
   onUpdateGeometry: (id: string, coords: [number, number][]) => void;
-  layerRef: (id: string, el: L.Layer | null) => void;
+  layerRef: (id: string, el: Layer | null) => void;
+  onImageClick?: (imageUrl: string) => void;
 }) => {
   const pathOptions = React.useMemo(() => ({ 
     fillColor: zone.color,
@@ -174,7 +185,16 @@ const ZoneLayer = React.memo(({
               )}
               {zone.noteImage && (
                 <div className="mt-2 rounded overflow-hidden border border-slate-100">
-                  <img src={zone.noteImage} alt="Nota" className="w-full h-auto max-h-[100px] object-cover" referrerPolicy="no-referrer" />
+                  <img
+                    src={zone.noteImage}
+                    alt="Nota"
+                    className="w-full h-auto max-h-[100px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                    referrerPolicy="no-referrer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onImageClick?.(zone.noteImage);
+                    }}
+                  />
                 </div>
               )}
             </div>
@@ -230,15 +250,14 @@ const ZoneLayer = React.memo(({
               )}
               {zone.noteImage && (
                 <div className="mt-2 rounded overflow-hidden border border-slate-100">
-                  <img 
-                    src={zone.noteImage} 
-                    alt="Nota" 
+                  <img
+                    src={zone.noteImage}
+                    alt="Nota"
                     className="w-full h-auto max-h-[100px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
                     referrerPolicy="no-referrer"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setFullImageUrl(zone.noteImage);
-                      setIsImageViewerOpen(true);
+                      onImageClick?.(zone.noteImage);
                     }}
                   />
                 </div>
@@ -303,15 +322,14 @@ const ZoneLayer = React.memo(({
             )}
               {zone.noteImage && (
                 <div className="mt-2 rounded overflow-hidden border border-slate-100">
-                  <img 
-                    src={zone.noteImage} 
-                    alt="Nota" 
+                  <img
+                    src={zone.noteImage}
+                    alt="Nota"
                     className="w-full h-auto max-h-[100px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
                     referrerPolicy="no-referrer"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setFullImageUrl(zone.noteImage);
-                      setIsImageViewerOpen(true);
+                      onImageClick?.(zone.noteImage);
                     }}
                   />
                 </div>
@@ -343,8 +361,8 @@ const MapEvents = ({
 }: { 
   isDrawing: boolean; 
   drawMode: string | null; 
-  onMapClick: (e: L.LeafletMouseEvent) => void;
-  onMouseMove: (e: L.LeafletMouseEvent) => void;
+  onMapClick: (e: LeafletMouseEvent) => void;
+  onMouseMove: (e: LeafletMouseEvent) => void;
   onFinish: () => void;
 }) => {
   useMapEvents({
@@ -377,9 +395,126 @@ const MapEvents = ({
 };
 
 // Map State Tracker Component
-const MapStateTracker = ({ onMapMove }: { onMapMove: (center: [number, number], zoom: number) => void }) => {
+const MapStateTracker = ({ onMapMove, onMapRotate }: { 
+  onMapMove: (center: [number, number], zoom: number) => void;
+  onMapRotate?: (bearing: number) => void;
+}) => {
   const map = useMap();
   
+  // Guardar referencia al mapa globalmente para los botones de rotación
+  useEffect(() => {
+    (window as any).leafletMap = map;
+    
+    // Habilitar el handler de rotación del plugin
+    if ((map as any)._handlers.rotate) {
+      (map as any)._handlers.rotate.enable();
+    }
+
+    // Habilitar gestos táctiles (pinch-to-rotate en móvil)
+    if ((map as any)._handlers.touchGestures) {
+      (map as any)._handlers.touchGestures.enable();
+    }
+    
+    return () => {
+      delete (window as any).leafletMap;
+    };
+  }, [map]);
+  
+  // Sincronizar el ángulo de rotación con el estado global
+  useEffect(() => {
+    const updateBearing = () => {
+      if (onMapRotate && (map as any)._bearing !== undefined) {
+        onMapRotate((map as any)._bearing);
+      }
+    };
+    
+    map.on('rotateend', updateBearing);
+    map.on('moveend', updateBearing);
+    
+    return () => {
+      map.off('rotateend', updateBearing);
+      map.off('moveend', updateBearing);
+    };
+  }, [map, onMapRotate]);
+  
+  // Agregar eventos de teclado para rotación (Shift + flechas)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        const delta = e.key === 'ArrowLeft' ? -5 : 5;
+        const currentBearing = (map as any)._bearing || 0;
+        const newBearing = ((currentBearing + delta) % 360 + 360) % 360;
+        if (typeof (map as any).setBearing === 'function') {
+          (map as any).setBearing(newBearing);
+          onMapRotate?.(newBearing);
+        }
+      }
+      // Reset con R
+      if (e.key === 'r' || e.key === 'R') {
+        if (typeof (map as any).setBearing === 'function') {
+          (map as any).setBearing(0);
+          onMapRotate?.(0);
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [map, onMapRotate]);
+
+  // Rotación con botón central del mouse (drag)
+  useEffect(() => {
+    const container = map.getContainer();
+    let isDragging = false;
+    let lastX = 0;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      // Middle mouse: button=1, button=4 (some browsers), or which=2 (auxclick)
+      const isMiddleMouse = e.button === 1 || e.button === 4 || e.which === 2;
+      if (isMiddleMouse) {
+        e.preventDefault();
+        e.stopPropagation();
+        isDragging = true;
+        lastX = e.clientX;
+        container.style.cursor = 'grabbing';
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - lastX;
+      lastX = e.clientX;
+      const currentBearing = (map as any)._bearing || 0;
+      const newBearing = ((currentBearing + deltaX * 0.5) % 360 + 360) % 360;
+      if (typeof (map as any).setBearing === 'function') {
+        (map as any).setBearing(newBearing);
+        // Don't update React state during drag - only on mouseup to avoid re-renders
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isDragging) {
+        isDragging = false;
+        container.style.cursor = '';
+        // Update bearing state once when drag ends
+        if (typeof (map as any)._bearing === 'number') {
+          onMapRotate?.((map as any)._bearing);
+        }
+      }
+    };
+
+    // Use capture phase so we intercept BEFORE Leaflet's handlers
+    container.addEventListener('mousedown', handleMouseDown, { capture: true });
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      container.removeEventListener('mousedown', handleMouseDown, { capture: true });
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [map, onMapRotate]);
+
   useMapEvents({
     moveend: () => {
       const center = map.getCenter();
@@ -492,7 +627,7 @@ export default function App() {
       groups: [],
       wmsLayers: [],
       selectedZoneId: null,
-      selectedGroupId: null,
+      selectedGroupIds: [],
       isDrawing: false,
       isEditing: false,
       drawMode: null,
@@ -548,7 +683,7 @@ export default function App() {
   const noteImageInputRef = useRef<HTMLInputElement>(null);
   
   const projectInputRef = useRef<HTMLInputElement>(null);
-  const zoneLayersRef = useRef<Map<string, L.Layer>>(new Map());
+  const zoneLayersRef = useRef<Map<string, Layer>>(new Map());
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
   // Auth state - conectar con backend de Render
@@ -574,6 +709,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [cloudProjects, setCloudProjects] = useState<{ id: number; name: string; updated_at: string }[]>([]);
+  const [mapBearing, setMapBearing] = useState(0); // Ángulo de rotación del mapa (CSS rotate)
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
@@ -604,7 +740,7 @@ export default function App() {
     });
   }, []);
 
-  const handleMapClick = useCallback((e: L.LeafletMouseEvent) => {
+  const handleMapClick = useCallback((e: LeafletMouseEvent) => {
     const { lat, lng } = e.latlng;
     
     setState(prev => {
@@ -632,7 +768,7 @@ export default function App() {
     });
   }, []);
 
-  const handleMouseMove = useCallback((e: L.LeafletMouseEvent) => {
+  const handleMouseMove = useCallback((e: LeafletMouseEvent) => {
     setMousePos([e.latlng.lat, e.latlng.lng]);
   }, []);
 
@@ -695,8 +831,8 @@ export default function App() {
 
   const selectAllVisibleZones = () => {
     setState(prev => {
-      const visibleZones = prev.zones.filter(z => 
-        (!prev.selectedGroupId || z.groupId === prev.selectedGroupId) &&
+      const visibleZones = prev.zones.filter(z =>
+        (prev.selectedGroupIds.length === 0 || prev.selectedGroupIds.includes(z.groupId || '')) &&
         z.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
       const visibleIds = visibleZones.map(z => z.id);
@@ -854,9 +990,9 @@ export default function App() {
     const zone = state.zones.find(z => z.id === id);
     if (!zone) return;
 
-    // Ensure the zone is visible in the sidebar
-    if (state.selectedGroupId && zone.groupId !== state.selectedGroupId) {
-      setState(prev => ({ ...prev, selectedGroupId: null, selectedZoneId: id }));
+    // Ensure the zone is visible in the sidebar - clear group filter if zone's group not selected
+    if (state.selectedGroupIds.length > 0 && zone.groupId && !state.selectedGroupIds.includes(zone.groupId)) {
+      setState(prev => ({ ...prev, selectedGroupIds: [], selectedZoneId: id }));
     } else {
       setState(prev => ({ ...prev, selectedZoneId: id }));
     }
@@ -934,7 +1070,7 @@ export default function App() {
           ...prev,
           groups: prev.groups.filter(g => g.id !== groupId),
           zones: prev.zones.map(z => z.groupId === groupId ? { ...z, groupId: null } : z),
-          selectedGroupId: prev.selectedGroupId === groupId ? null : prev.selectedGroupId
+          selectedGroupIds: prev.selectedGroupIds.filter(id => id !== groupId)
         }));
       }
     );
@@ -1099,78 +1235,80 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleExportProject = async () => {
-    if (user && token) {
-      const confirmed = confirm(
-        '¿Guardar proyecto en la nube?\n\n' +
-        '- Se guardarán todas las zonas, grupos y configuración del mapa\n' +
-        '- Se incluirán las imágenes adjuntas\n' +
-        '- Podrás recuperar este proyecto desde cualquier dispositivo\n\n' +
-        'NOTA: Si ya existe un proyecto con la misma fecha, será sobrescrito.'
-      );
-      if (!confirmed) return;
-      
-      // Guardar en la base de datos (cloud) - CON imágenes
-      try {
-        const projectData = {
-          zones: state.zones,
-          groups: state.groups,
-          mapCenter: state.mapCenter,
-          mapZoom: state.mapZoom
-        };
-        
-        const projectName = `proyecto-${new Date().toISOString().split('T')[0]}`;
-        
-        console.log('Saving to:', `${API_URL}/api/auth/projects`);
-        console.log('Data size:', JSON.stringify(projectData).length, 'bytes');
-        
-        const response = await fetch(`${API_URL}/api/auth/projects`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            name: projectName,
-            data: projectData
-          })
-        });
-
-        console.log('Response status:', response.status);
-        
-        if (response.ok) {
-          alert('Proyecto guardado en la nube');
-        } else {
-          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-          console.error('Error response:', errorData);
-          alert('Error al guardar: ' + errorData.error);
-        }
-      } catch (err: any) {
-        console.error('Error saving to cloud:', err);
-        alert('Error al guardar en la nube: ' + err.message);
-      }
-    } else {
-      // Guardar localmente (sin login)
-      const confirmed = confirm(
-        '¿Descargar proyecto como archivo?\n\n' +
-        '- Se guardarán todas las zonas, grupos y configuración del mapa\n' +
-        '- Se incluirán las imágenes adjuntas\n' +
-        '- Se descargará un archivo JSON en tu dispositivo'
-      );
-      if (!confirmed) return;
-      
-      const projectData = {
-        version: '1.0',
-        state: {
-          zones: state.zones,
-          groups: state.groups,
-          mapCenter: state.mapCenter,
-          mapZoom: state.mapZoom
-        }
-      };
-      const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
-      saveAs(blob, `proyecto-mapa-${new Date().toISOString().split('T')[0]}.json`);
+  // Guardar proyecto en la nube (función específica para el botón)
+  const saveProjectToCloud = async () => {
+    const currentToken = token || localStorage.getItem('geo-token');
+    if (!currentToken) {
+      alert('Debes iniciar sesión para guardar en la nube');
+      return;
     }
+
+    const confirmed = confirm(
+      '¿Guardar proyecto en la nube?\n\n' +
+      '- Se guardarán todas las zonas, grupos y configuración del mapa\n' +
+      '- Se incluirán las imágenes adjuntas\n' +
+      '- Podrás recuperar este proyecto desde cualquier dispositivo\n\n' +
+      'NOTA: Si ya existe un proyecto con la misma fecha, será sobrescrito.'
+    );
+    if (!confirmed) return;
+
+    try {
+      const projectData = {
+        zones: state.zones,
+        groups: state.groups,
+        mapCenter: state.mapCenter,
+        mapZoom: state.mapZoom
+      };
+
+      const projectName = `proyecto-${new Date().toISOString().split('T')[0]}`;
+
+      const response = await fetch(`${API_URL}/api/auth/projects`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentToken}`
+        },
+        body: JSON.stringify({
+          name: projectName,
+          data: projectData
+        })
+      });
+
+      if (response.ok) {
+        alert('Proyecto guardado en la nube');
+        // Recargar la lista de proyectos
+        loadCloudProjects();
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        alert('Error al guardar: ' + errorData.error);
+      }
+    } catch (err: any) {
+      console.error('Error saving to cloud:', err);
+      alert('Error al guardar en la nube: ' + err.message);
+    }
+  };
+
+  const handleExportProject = async () => {
+    // Siempre guardar localmente (descargar archivo JSON)
+    const confirmed = confirm(
+      '¿Descargar proyecto como archivo?\n\n' +
+      '- Se guardarán todas las zonas, grupos y configuración del mapa\n' +
+      '- Se incluirán las imágenes adjuntas\n' +
+      '- Se descargará un archivo JSON en tu dispositivo'
+    );
+    if (!confirmed) return;
+    
+    const projectData = {
+      version: '1.0',
+      state: {
+        zones: state.zones,
+        groups: state.groups,
+        mapCenter: state.mapCenter,
+        mapZoom: state.mapZoom
+      }
+    };
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+    saveAs(blob, `proyecto-mapa-${new Date().toISOString().split('T')[0]}.json`);
   };
 
   const handleImportProject = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1221,7 +1359,7 @@ export default function App() {
               ...prev,
               ...data.state,
               selectedZoneId: null,
-              selectedGroupId: null,
+              selectedGroupIds: [],
               isDrawing: false,
               isEditing: false,
               drawMode: null,
@@ -1350,6 +1488,10 @@ const handleExportImage = async () => {
       setToken(data.token);
       localStorage.setItem('geo-user', JSON.stringify(data.user));
       localStorage.setItem('geo-token', data.token);
+
+      // Cargar proyectos y auto-seleccionar el más reciente
+      await loadCloudProjectsAndAutoSelect();
+
       setShowAuthModal(false);
       setAuthEmail('');
       setAuthPassword('');
@@ -1389,11 +1531,12 @@ const handleExportImage = async () => {
 
   // Load projects from cloud
   const loadCloudProjects = async () => {
-    if (!user || !token) return;
+    const currentToken = token || localStorage.getItem('geo-token');
+    if (!currentToken) return;
     setLoadingProjects(true);
     try {
       const response = await fetch(`${API_URL}/api/auth/projects`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${currentToken}` }
       });
       if (response.ok) {
         const data = await response.json();
@@ -1403,6 +1546,65 @@ const handleExportImage = async () => {
       console.error('Error loading projects:', err);
     } finally {
       setLoadingProjects(false);
+    }
+  };
+
+  // Load projects and auto-select the most recent one
+  const loadCloudProjectsAndAutoSelect = async () => {
+    const currentToken = token || localStorage.getItem('geo-token');
+    if (!currentToken) return;
+    setLoadingProjects(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/projects`, {
+        headers: { Authorization: `Bearer ${currentToken}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCloudProjects(data.projects);
+
+        // Auto-load the most recently updated project if exists
+        if (data.projects && data.projects.length > 0) {
+          const mostRecent = data.projects[0]; // Ordered by updated_at DESC
+          // Auto-cargar sin confirmar porque es el primero que se carga
+          await loadCloudProjectSilent(mostRecent.id);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading projects:', err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  // Load a single project silently (no confirmation dialog)
+  const loadCloudProjectSilent = async (projectId: number) => {
+    const currentToken = token || localStorage.getItem('geo-token');
+    if (!currentToken) return;
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/projects/${projectId}`, {
+        headers: { Authorization: `Bearer ${currentToken}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const projectData = data.project.data;
+        setState(prev => ({
+          ...prev,
+          zones: projectData.zones || [],
+          groups: projectData.groups || [],
+          mapCenter: projectData.mapCenter || [40.4168, -3.7038],
+          mapZoom: projectData.mapZoom || 6,
+          selectedZoneId: null,
+          selectedGroupIds: [],
+          isDrawing: false,
+          isEditing: false,
+          drawMode: null,
+          tempPoints: []
+        }));
+        setShowProjectsModal(false);
+      }
+    } catch (err) {
+      console.error('Error loading project:', err);
     }
   };
 
@@ -1431,7 +1633,7 @@ const handleExportImage = async () => {
           mapCenter: projectData.mapCenter || [40.4168, -3.7038],
           mapZoom: projectData.mapZoom || 6,
           selectedZoneId: null,
-          selectedGroupId: null,
+          selectedGroupIds: [],
           isDrawing: false,
           isEditing: false,
           drawMode: null,
@@ -1467,7 +1669,16 @@ const handleExportImage = async () => {
   };
 
   useEffect(() => {
-    verifyToken();
+    const initAuth = async () => {
+      await verifyToken();
+      // After verifyToken completes, user will be set (or logged out)
+      const saved = localStorage.getItem('geo-user');
+      const savedToken = localStorage.getItem('geo-token');
+      if (saved && savedToken) {
+        loadCloudProjects();
+      }
+    };
+    initAuth();
   }, [token]);
 
   return (
@@ -1619,11 +1830,11 @@ const handleExportImage = async () => {
                   </div>
                   
                   <div className="flex flex-wrap gap-2">
-                    <button 
-                      onClick={() => setState(prev => ({ ...prev, selectedGroupId: null }))}
+                    <button
+                      onClick={() => setState(prev => ({ ...prev, selectedGroupIds: [] }))}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                        state.selectedGroupId === null 
-                          ? 'bg-blue-600 border-blue-600 text-white' 
+                        state.selectedGroupIds.length === 0
+                          ? 'bg-blue-600 border-blue-600 text-white'
                           : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                       }`}
                     >
@@ -1633,11 +1844,19 @@ const handleExportImage = async () => {
                       .filter(g => g.name.toLowerCase().includes(searchQuery.toLowerCase()))
                       .map(group => (
                       <div key={group.id} className="relative group">
-                        <button 
-                          onClick={() => setState(prev => ({ ...prev, selectedGroupId: group.id }))}
+                        <button
+                          onClick={() => setState(prev => {
+                            const isSelected = prev.selectedGroupIds.includes(group.id);
+                            return {
+                              ...prev,
+                              selectedGroupIds: isSelected
+                                ? prev.selectedGroupIds.filter(id => id !== group.id)
+                                : [...prev.selectedGroupIds, group.id]
+                            };
+                          })}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-2 ${
-                            state.selectedGroupId === group.id 
-                              ? 'bg-blue-600 border-blue-600 text-white' 
+                            state.selectedGroupIds.includes(group.id)
+                              ? 'bg-blue-600 border-blue-600 text-white'
                               : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                           }`}
                         >
@@ -1752,7 +1971,7 @@ const handleExportImage = async () => {
                 </div>
 
                 {state.zones
-                  .filter(z => (!state.selectedGroupId || z.groupId === state.selectedGroupId) && 
+                  .filter(z => (state.selectedGroupIds.length === 0 || (z.groupId && state.selectedGroupIds.includes(z.groupId))) &&
                                (z.name.toLowerCase().includes(searchQuery.toLowerCase())))
                   .length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
@@ -1765,7 +1984,7 @@ const handleExportImage = async () => {
                   </div>
                 ) : (
                   state.zones
-                    .filter(z => (!state.selectedGroupId || z.groupId === state.selectedGroupId) && 
+                    .filter(z => (state.selectedGroupIds.length === 0 || (z.groupId && state.selectedGroupIds.includes(z.groupId))) &&
                                  (z.name.toLowerCase().includes(searchQuery.toLowerCase())))
                     .map(zone => {
                       const isMultiSelected = state.multiSelectedIds.includes(zone.id);
@@ -1999,10 +2218,10 @@ const handleExportImage = async () => {
                   <button 
                     onClick={handleExportProject}
                     className="flex-1 bg-white border border-slate-200 text-slate-700 px-3 py-2 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors flex items-center justify-center gap-2"
-                    title="Guardar proyecto completo"
+                    title="Descargar proyecto al dispositivo"
                   >
                     <Save className="w-3 h-3" />
-                    Proyecto
+                    Descargar
                   </button>
                 </div>
                 <div className="flex gap-2">
@@ -2018,11 +2237,33 @@ const handleExportImage = async () => {
                       onClick={() => { loadCloudProjects(); setShowProjectsModal(true); }}
                       className="flex-1 bg-blue-600 border border-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                     >
-<Database className="w-3 h-3" />
+                      <Database className="w-3 h-3" />
                       Nube
                     </button>
                   )}
                 </div>
+                
+                {/* Opciones de nube */}
+                {user && (
+                  <div className="flex gap-2 mt-2">
+                    <button 
+                      onClick={() => saveProjectToCloud()}
+                      className="flex-1 bg-green-600 border border-green-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                      title="Guardar proyecto en la nube"
+                    >
+                      <Cloud className="w-3 h-3" />
+                      Guardar en Nube
+                    </button>
+                    <button 
+                      onClick={() => { loadCloudProjects(); setShowProjectsModal(true); }}
+                      className="flex-1 bg-blue-600 border border-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                      title="Cargar proyecto de la nube"
+                    >
+                      <Download className="w-3 h-3" />
+                      Cargar Nube
+                    </button>
+                  </div>
+                )}
                 <input
                   type="file" 
                   ref={projectInputRef} 
@@ -2057,16 +2298,26 @@ const handleExportImage = async () => {
             </button>
           )}
 
-          <MapContainer 
-            center={state.mapCenter} 
-            zoom={state.mapZoom} 
+          {/* MapContainer con rotación integrada del plugin */}
+          <MapContainer
+            center={state.mapCenter}
+            zoom={state.mapZoom}
             className="w-full h-full"
             zoomControl={false}
             preferCanvas={true}
+            rotate={true}
+            touchRotate={true}
+            touchGestures={true}
           >
-            <MapStateTracker onMapMove={(center, zoom) => {
-              setState(prev => ({ ...prev, mapCenter: center, mapZoom: zoom }));
-            }} />
+            <MapStateTracker
+              onMapMove={(center, zoom) => {
+                setState(prev => ({ ...prev, mapCenter: center, mapZoom: zoom }));
+              }}
+              onMapRotate={(bearing) => {
+                // Only update bearing state - zones rotate via leaflet-rotate plugin
+                setMapBearing(bearing);
+              }}
+            />
             <ZoomControl position="bottomright" />
             <TileLayer
               url={mapType === 'osm' 
@@ -2114,12 +2365,12 @@ const handleExportImage = async () => {
 
             {/* Render Existing Zones */}
             {React.useMemo(() => {
-              const filteredZones = state.filterByGroup && state.selectedGroupId 
-                ? state.zones.filter(z => z.groupId === state.selectedGroupId)
+              const filteredZones = state.filterByGroup && state.selectedGroupIds.length > 0
+                ? state.zones.filter(z => z.groupId && state.selectedGroupIds.includes(z.groupId))
                 : state.zones;
                 
               return filteredZones.map((zone) => (
-                <ZoneLayer 
+                <ZoneLayer
                   key={zone.id}
                   zone={zone}
                   isSelected={state.selectedZoneId === zone.id}
@@ -2127,13 +2378,17 @@ const handleExportImage = async () => {
                   isEditing={state.isEditing && state.selectedZoneId === zone.id}
                   onSelect={selectZone}
                   onUpdateGeometry={updateZoneGeometry}
+                  onImageClick={(imageUrl: string) => {
+                    setFullImageUrl(imageUrl);
+                    setIsImageViewerOpen(true);
+                  }}
                   layerRef={(id, el) => {
                     if (el) zoneLayersRef.current.set(id, el);
                     else zoneLayersRef.current.delete(id);
                   }}
                 />
               ));
-            }, [state.zones, state.selectedZoneId, state.multiSelectedIds, state.isEditing, state.filterByGroup, state.selectedGroupId])}
+            }, [state.zones, state.selectedZoneId, state.multiSelectedIds, state.isEditing, state.filterByGroup, state.selectedGroupIds])}
 
             {/* Clustered Labels */}
             <MarkerClusterGroup 
@@ -2144,8 +2399,8 @@ const handleExportImage = async () => {
               disableClusteringAtZoom={18}
             >
               {React.useMemo(() => {
-                const filteredZones = state.filterByGroup && state.selectedGroupId 
-                  ? state.zones.filter(z => z.groupId === state.selectedGroupId)
+                const filteredZones = state.filterByGroup && state.selectedGroupIds.length > 0
+                  ? state.zones.filter(z => z.groupId && state.selectedGroupIds.includes(z.groupId))
                   : state.zones;
                   
                 return filteredZones.map(zone => (
@@ -2193,7 +2448,7 @@ const handleExportImage = async () => {
                     </Tooltip>
                   </Marker>
                 ));
-              }, [state.zones, state.filterByGroup, state.selectedGroupId])}
+              }, [state.zones, state.filterByGroup, state.selectedGroupIds])}
             </MarkerClusterGroup>
 
             {/* Render Drawing Preview */}
@@ -2302,6 +2557,13 @@ const handleExportImage = async () => {
                     onClick={handleExportImage}
                     icon={<MapIcon className="w-5 h-5" />}
                     label="Capturar Imagen"
+                  />
+                  <div className="h-px bg-slate-100 mx-2 my-1"></div>
+                  <ToolButton 
+                    active={false} 
+                    onClick={() => applyBearing(0, setMapBearing)}
+                    icon={<Compass className="w-5 h-5" />}
+                    label="Reset Norte"
                   />
                   <div className="h-px bg-slate-100 mx-2 my-1"></div>
                   <ToolButton 

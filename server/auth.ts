@@ -1,10 +1,15 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import { pool, initDatabase } from './db.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'geomeasure-secret-key-change-in-production';
+
+// Extend JwtPayload to include userId
+interface CustomJwtPayload extends JwtPayload {
+  userId: number;
+}
 
 // Initialize database on module load
 initDatabase().catch(console.error);
@@ -100,7 +105,7 @@ router.get('/verify', async (req, res) => {
     const token = authHeader.split(' ')[1];
     let decoded;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload;
     } catch (e) {
       return res.status(401).json({ error: 'Invalid token' });
     }
@@ -132,7 +137,7 @@ router.post('/projects', async (req, res) => {
     const token = authHeader.split(' ')[1];
     let decoded;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload;
     } catch (e) {
       return res.status(401).json({ error: 'Invalid token format' });
     }
@@ -193,7 +198,7 @@ router.get('/projects', async (req, res) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload;
 
     const result = await pool.query(
       'SELECT id, name, created_at, updated_at FROM projects WHERE user_id = $1 ORDER BY updated_at DESC',
@@ -216,7 +221,7 @@ router.get('/projects/:id', async (req, res) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload;
 
     const result = await pool.query(
       'SELECT id, name, data, created_at, updated_at FROM projects WHERE id = $1 AND user_id = $2',
@@ -243,7 +248,7 @@ router.delete('/projects/:id', async (req, res) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET) as CustomJwtPayload;
 
     await pool.query(
       'DELETE FROM projects WHERE id = $1 AND user_id = $2',
