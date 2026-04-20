@@ -14,7 +14,7 @@ import {
 } from 'react-leaflet';
 import * as L_raw from 'leaflet';
 import type { Layer, LeafletMouseEvent } from 'leaflet';
-import 'leaflet-rotate'; // Plugin para rotar el mapa (gestos + teclado)
+// Plugin de rotación removido por conflictos con redibujado
 import { centroid as turfCentroid, polygon as turfPolygon, lineString as turfLineString } from '@turf/turf';
 import MarkerClusterGroup_raw from 'react-leaflet-cluster';
 import { 
@@ -63,7 +63,8 @@ import {
   LogIn,
   LogOut,
   Cloud,
-  Compass
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toPng, toJpeg } from 'html-to-image';
@@ -84,11 +85,6 @@ import {
 
 // Handle Leaflet ESM import issues
 const L = (L_raw as any).default || L_raw;
-// Helper to apply bearing via CSS transform
-const applyBearing = (bearing: number, setBearing: (b: number) => void) => {
-  const normalized = ((bearing % 360) + 360) % 360;
-  setBearing(normalized);
-};
 const MarkerClusterGroup = (MarkerClusterGroup_raw as any).default || MarkerClusterGroup_raw;
 
 // Fix Leaflet default icon issue
@@ -134,7 +130,9 @@ const ZoneLayer = React.memo(({
   isSelected,
   isMultiSelected,
   isEditing,
+  isDrawingPoint,
   onSelect,
+  onMapClick,
   onUpdateGeometry,
   layerRef,
   onImageClick
@@ -143,33 +141,39 @@ const ZoneLayer = React.memo(({
   isSelected: boolean;
   isMultiSelected: boolean;
   isEditing: boolean;
+  isDrawingPoint: boolean;
   onSelect: (id: string) => void;
+  onMapClick?: (e: LeafletMouseEvent) => void;
   onUpdateGeometry: (id: string, coords: [number, number][]) => void;
   layerRef: (id: string, el: Layer | null) => void;
   onImageClick?: (imageUrl: string) => void;
 }) => {
-  const pathOptions = React.useMemo(() => ({ 
+  const pathOptions = React.useMemo(() => ({
     fillColor: zone.color,
-    color: isMultiSelected ? '#3b82f6' : zone.color, 
+    color: isMultiSelected ? '#3b82f6' : zone.color,
     fillOpacity: isSelected || isMultiSelected ? 0.4 : 0.2,
     weight: isSelected || isMultiSelected ? 4 : 2,
     dashArray: isMultiSelected ? '5, 5' : undefined,
-    bubblingMouseEvents: false
-  }), [zone.color, isSelected, isMultiSelected]);
+    bubblingMouseEvents: isDrawingPoint ? true : false
+  }), [zone.color, isSelected, isMultiSelected, isDrawingPoint]);
 
   if (zone.type === 'polygon') {
     return (
       <React.Fragment>
-        <Polygon 
+        <Polygon
           ref={(el) => layerRef(zone.id, el)}
           positions={zone.coordinates as [number, number][]}
           pathOptions={pathOptions}
           eventHandlers={{
             click: (e) => {
-              onSelect(zone.id);
-              const layer = e.target;
-              if (layer.bringToFront) layer.bringToFront();
-              L.DomEvent.stopPropagation(e);
+              if (isDrawingPoint) {
+                L.DomEvent.stopPropagation(e);
+                onMapClick(e);
+              } else {
+                onSelect(zone.id);
+                const layer = e.target;
+                if (layer.bringToFront) layer.bringToFront();
+              }
             }
           }}
         >
@@ -201,11 +205,11 @@ const ZoneLayer = React.memo(({
           </Popup>
         </Polygon>
         {isEditing && (zone.coordinates as [number, number][]).map((coord, idx) => (
-          <Marker 
+          <Marker
             key={`${zone.id}-vertex-${idx}`}
             position={coord}
             draggable={true}
-            icon={L.divIcon({ 
+            icon={L.divIcon({
               className: 'bg-white w-3 h-3 rounded-full border-2 border-blue-600 shadow-md',
               iconSize: [12, 12],
               iconAnchor: [6, 6]
@@ -221,21 +225,43 @@ const ZoneLayer = React.memo(({
             }}
           />
         ))}
+        {zone.emoji && (
+          <Marker
+            position={getZoneCenter(zone)}
+            zIndexOffset={1000}
+            icon={L.divIcon({
+              className: 'flex items-center justify-center',
+              html: `<div class="text-2xl drop-shadow-lg" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">${zone.emoji}</div>`,
+              iconSize: [40, 40],
+              iconAnchor: [20, 20]
+            })}
+            eventHandlers={{
+              click: (e) => {
+                onSelect(zone.id);
+                L.DomEvent.stopPropagation(e);
+              }
+            }}
+          />
+        )}
       </React.Fragment>
     );
   } else if (zone.type === 'polyline') {
     return (
       <React.Fragment>
-        <Polyline 
+        <Polyline
           ref={(el) => layerRef(zone.id, el)}
           positions={zone.coordinates as [number, number][]}
           pathOptions={pathOptions}
           eventHandlers={{
             click: (e) => {
-              onSelect(zone.id);
-              const layer = e.target;
-              if (layer.bringToFront) layer.bringToFront();
-              L.DomEvent.stopPropagation(e);
+              if (isDrawingPoint) {
+                L.DomEvent.stopPropagation(e);
+                onMapClick?.(e);
+              } else {
+                onSelect(zone.id);
+                const layer = e.target;
+                if (layer.bringToFront) layer.bringToFront();
+              }
             }
           }}
         >
@@ -266,11 +292,11 @@ const ZoneLayer = React.memo(({
           </Popup>
         </Polyline>
         {isEditing && (zone.coordinates as [number, number][]).map((coord, idx) => (
-          <Marker 
+          <Marker
             key={`${zone.id}-vertex-${idx}`}
             position={coord}
             draggable={true}
-            icon={L.divIcon({ 
+            icon={L.divIcon({
               className: 'bg-white w-3 h-3 rounded-full border-2 border-blue-600 shadow-md',
               iconSize: [12, 12],
               iconAnchor: [6, 6]
@@ -286,18 +312,38 @@ const ZoneLayer = React.memo(({
             }}
           />
         ))}
+        {zone.emoji && (
+          <Marker
+            position={getZoneCenter(zone)}
+            zIndexOffset={1000}
+            icon={L.divIcon({
+              className: 'flex items-center justify-center',
+              html: `<div class="text-2xl drop-shadow-lg" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">${zone.emoji}</div>`,
+              iconSize: [40, 40],
+              iconAnchor: [20, 20]
+            })}
+            eventHandlers={{
+              click: (e) => {
+                onSelect(zone.id);
+                L.DomEvent.stopPropagation(e);
+              }
+            }}
+          />
+        )}
       </React.Fragment>
     );
   } else {
     return (
-      <Marker 
+      <Marker
         position={zone.coordinates as [number, number]}
         draggable={isEditing}
-        icon={L.divIcon({ 
+        icon={L.divIcon({
           className: 'flex items-center justify-center',
-          html: `<div class="w-4 h-4 rounded-full border-2 border-white shadow-lg transition-all ${isSelected || isMultiSelected ? 'scale-125' : ''} ${isMultiSelected ? 'ring-4 ring-blue-500/50' : ''}" style="background-color: ${zone.color}"></div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
+          html: zone.emoji
+            ? `<div class="text-2xl drop-shadow-lg" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">${zone.emoji}</div>`
+            : `<div class="w-4 h-4 rounded-full border-2 border-white shadow-lg transition-all ${isSelected || isMultiSelected ? 'scale-125' : ''} ${isMultiSelected ? 'ring-4 ring-blue-500/50' : ''}" style="background-color: ${zone.color}"></div>`,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
         })}
         eventHandlers={{
           click: (e) => {
@@ -395,125 +441,10 @@ const MapEvents = ({
 };
 
 // Map State Tracker Component
-const MapStateTracker = ({ onMapMove, onMapRotate }: { 
+const MapStateTracker = ({ onMapMove }: {
   onMapMove: (center: [number, number], zoom: number) => void;
-  onMapRotate?: (bearing: number) => void;
 }) => {
   const map = useMap();
-  
-  // Guardar referencia al mapa globalmente para los botones de rotación
-  useEffect(() => {
-    (window as any).leafletMap = map;
-    
-    // Habilitar el handler de rotación del plugin
-    if ((map as any)._handlers.rotate) {
-      (map as any)._handlers.rotate.enable();
-    }
-
-    // Habilitar gestos táctiles (pinch-to-rotate en móvil)
-    if ((map as any)._handlers.touchGestures) {
-      (map as any)._handlers.touchGestures.enable();
-    }
-    
-    return () => {
-      delete (window as any).leafletMap;
-    };
-  }, [map]);
-  
-  // Sincronizar el ángulo de rotación con el estado global
-  useEffect(() => {
-    const updateBearing = () => {
-      if (onMapRotate && (map as any)._bearing !== undefined) {
-        onMapRotate((map as any)._bearing);
-      }
-    };
-    
-    map.on('rotateend', updateBearing);
-    map.on('moveend', updateBearing);
-    
-    return () => {
-      map.off('rotateend', updateBearing);
-      map.off('moveend', updateBearing);
-    };
-  }, [map, onMapRotate]);
-  
-  // Agregar eventos de teclado para rotación (Shift + flechas)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-        e.preventDefault();
-        const delta = e.key === 'ArrowLeft' ? -5 : 5;
-        const currentBearing = (map as any)._bearing || 0;
-        const newBearing = ((currentBearing + delta) % 360 + 360) % 360;
-        if (typeof (map as any).setBearing === 'function') {
-          (map as any).setBearing(newBearing);
-          onMapRotate?.(newBearing);
-        }
-      }
-      // Reset con R
-      if (e.key === 'r' || e.key === 'R') {
-        if (typeof (map as any).setBearing === 'function') {
-          (map as any).setBearing(0);
-          onMapRotate?.(0);
-        }
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [map, onMapRotate]);
-
-  // Rotación con botón central del mouse (drag)
-  useEffect(() => {
-    const container = map.getContainer();
-    let isDragging = false;
-    let lastX = 0;
-
-    const handleMouseDown = (e: MouseEvent) => {
-      // Middle mouse: button=1, button=4 (some browsers), or which=2 (auxclick)
-      const isMiddleMouse = e.button === 1 || e.button === 4 || e.which === 2;
-      if (isMiddleMouse) {
-        e.preventDefault();
-        e.stopPropagation();
-        isDragging = true;
-        lastX = e.clientX;
-        container.style.cursor = 'grabbing';
-      }
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
-      const deltaX = e.clientX - lastX;
-      lastX = e.clientX;
-      const currentBearing = (map as any)._bearing || 0;
-      const newBearing = ((currentBearing + deltaX * 0.5) % 360 + 360) % 360;
-      if (typeof (map as any).setBearing === 'function') {
-        (map as any).setBearing(newBearing);
-        // Don't update React state during drag - only on mouseup to avoid re-renders
-      }
-    };
-
-    const handleMouseUp = () => {
-      if (isDragging) {
-        isDragging = false;
-        container.style.cursor = '';
-        // Update bearing state once when drag ends
-        if (typeof (map as any)._bearing === 'number') {
-          onMapRotate?.((map as any)._bearing);
-        }
-      }
-    };
-
-    // Use capture phase so we intercept BEFORE Leaflet's handlers
-    container.addEventListener('mousedown', handleMouseDown, { capture: true });
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      container.removeEventListener('mousedown', handleMouseDown, { capture: true });
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [map, onMapRotate]);
 
   useMapEvents({
     moveend: () => {
@@ -525,7 +456,7 @@ const MapStateTracker = ({ onMapMove, onMapRotate }: {
       onMapMove([center.lat, center.lng], map.getZoom());
     }
   });
-  
+
   return null;
 };
 
@@ -609,6 +540,7 @@ export default function App() {
         const parsed = JSON.parse(saved);
         return {
           ...parsed,
+          selectedGroupIds: parsed.selectedGroupIds ?? [],
           wmsLayers: parsed.wmsLayers || [],
           isDrawing: false,
           isEditing: false,
@@ -648,6 +580,7 @@ export default function App() {
   const [editingZone, setEditingZone] = useState<GeoZone | null>(null);
   const [editingGroup, setEditingGroup] = useState<any | null>(null);
   const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupColor, setNewGroupColor] = useState('#3b82f6');
   const [showImportModal, setShowImportModal] = useState(false);
@@ -704,12 +637,12 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [authName, setAuthName] = useState('');
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [cloudProjects, setCloudProjects] = useState<{ id: number; name: string; updated_at: string }[]>([]);
-  const [mapBearing, setMapBearing] = useState(0); // Ángulo de rotación del mapa (CSS rotate)
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
@@ -1480,7 +1413,7 @@ const handleExportImage = async () => {
     setAuthLoading(true);
     try {
       const data = await authAPI(authMode, {
-        email: authEmail,
+        email: authEmail.toLowerCase().trim(),
         password: authPassword,
         name: authName
       });
@@ -2298,36 +2231,34 @@ const handleExportImage = async () => {
             </button>
           )}
 
-          {/* MapContainer con rotación integrada del plugin */}
+          {/* MapContainer */}
           <MapContainer
             center={state.mapCenter}
             zoom={state.mapZoom}
             className="w-full h-full"
             zoomControl={false}
-            preferCanvas={true}
-            rotate={true}
-            touchRotate={true}
-            touchGestures={true}
           >
             <MapStateTracker
               onMapMove={(center, zoom) => {
                 setState(prev => ({ ...prev, mapCenter: center, mapZoom: zoom }));
               }}
-              onMapRotate={(bearing) => {
-                // Only update bearing state - zones rotate via leaflet-rotate plugin
-                setMapBearing(bearing);
-              }}
             />
             <ZoomControl position="bottomright" />
             <TileLayer
-              url={mapType === 'osm' 
-                ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              url={mapType === 'osm'
+                ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                 : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
               }
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              updateWhenIdle={true}
-              updateWhenZooming={false}
+              attribution={mapType === 'osm'
+                ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                : '&copy; <a href="https://server.arcgisonline.com">ESRI</a>'
+              }
+              subdomains={mapType === 'osm' ? 'abcd' : undefined}
+              maxZoom={19}
+              updateWhenIdle={false}
+              updateWhenZooming={true}
               keepBuffer={2}
+              noWrap={true}
             />
 
             {state.wmsLayers.filter(l => l.visible).map(layer => (
@@ -2376,7 +2307,9 @@ const handleExportImage = async () => {
                   isSelected={state.selectedZoneId === zone.id}
                   isMultiSelected={state.multiSelectedIds.includes(zone.id)}
                   isEditing={state.isEditing && state.selectedZoneId === zone.id}
+                  isDrawingPoint={state.isDrawing && state.drawMode === 'point'}
                   onSelect={selectZone}
+                  onMapClick={handleMapClick}
                   onUpdateGeometry={updateZoneGeometry}
                   onImageClick={(imageUrl: string) => {
                     setFullImageUrl(imageUrl);
@@ -2515,7 +2448,7 @@ const handleExportImage = async () => {
                   initial={{ opacity: 0, scale: 0.9, y: -20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, y: -20 }}
-                  className="bg-white p-1 rounded-2xl shadow-2xl border border-slate-200 flex flex-col gap-1 max-h-[60vh] overflow-y-auto"
+                  className="bg-white p-1 rounded-2xl shadow-2xl border border-slate-200 flex flex-col gap-1"
                 >
                   <ToolButton 
                     active={false} 
@@ -2559,15 +2492,8 @@ const handleExportImage = async () => {
                     label="Capturar Imagen"
                   />
                   <div className="h-px bg-slate-100 mx-2 my-1"></div>
-                  <ToolButton 
-                    active={false} 
-                    onClick={() => applyBearing(0, setMapBearing)}
-                    icon={<Compass className="w-5 h-5" />}
-                    label="Reset Norte"
-                  />
-                  <div className="h-px bg-slate-100 mx-2 my-1"></div>
-                  <ToolButton 
-                    active={!state.isDrawing && !state.drawMode && !state.isEditing} 
+                  <ToolButton
+                    active={!state.isDrawing && !state.drawMode && !state.isEditing}
                     onClick={() => setState(prev => ({ ...prev, isDrawing: false, isEditing: false, drawMode: null, tempPoints: [], isToolsExpanded: false }))}
                     icon={<MousePointer2 className="w-5 h-5" />}
                     label="Seleccionar"
@@ -2706,6 +2632,31 @@ const handleExportImage = async () => {
                         className="w-8 h-8 rounded border-0 p-0 cursor-pointer"
                       />
                     </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Icono</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['🔨', '🔧', '🏠', '🌳', '🚗', '⭐', '❤️', '💧', '🔥', '❓', '📍', '🎯', '🏁', '🚩', '🗺️', '🔔', '⏰', '📷', '💡', '🔒', '🛠️', '⚙️', '🔑', '🅿️', '🚭', '🎪', '🎭', '🏗️', '🚜', '🌾', '🏭', '💎', '🎁', '📦', '🏆', '🥇', '🎖️', '📌', '✏️', '📝'].map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={() => setEditingZone({ ...editingZone, emoji: editingZone.emoji === emoji ? '' : emoji })}
+                        className={`w-9 h-9 rounded-lg border-2 text-xl flex items-center justify-center transition-all ${
+                          editingZone.emoji === emoji ? 'border-blue-500 bg-blue-50 scale-110' : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                    {editingZone.emoji && (
+                      <button
+                        onClick={() => setEditingZone({ ...editingZone, emoji: '' })}
+                        className="w-9 h-9 rounded-lg border-2 border-slate-200 text-slate-400 hover:border-red-300 hover:text-red-400 text-xs font-bold transition-all"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -3449,15 +3400,23 @@ const handleExportImage = async () => {
                   />
                 </div>
 
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-bold text-slate-700 mb-1">Contraseña</label>
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium"
+                    className="w-full px-4 py-3 pr-12 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium"
                     placeholder="••••••••"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-[38px] text-slate-400 hover:text-slate-600 transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
 
                 {authError && (
@@ -3571,7 +3530,7 @@ function ToolButton({ active, onClick, icon, label }: { active: boolean; onClick
       title={label}
     >
       {icon}
-      <span className="absolute left-full ml-3 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap font-bold z-50">
+      <span className="absolute right-full mr-3 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap font-bold z-50">
         {label}
       </span>
     </button>

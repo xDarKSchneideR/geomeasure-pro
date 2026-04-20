@@ -13,6 +13,7 @@ export interface GeoZone {
   groupId?: string | null;
   noteText?: string;
   noteImage?: string;
+  emoji?: string;
 }
 
 export interface GeoGroup {
