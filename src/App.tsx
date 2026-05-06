@@ -64,7 +64,8 @@ import {
   LogOut,
   Cloud,
   Eye,
-  EyeOff
+  EyeOff,
+  MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toPng, toJpeg } from 'html-to-image';
@@ -634,6 +635,13 @@ export default function App() {
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('geo-token'));
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactSubject, setContactSubject] = useState('');
+  const [contactMessage, setContactMessage] = useState('');
+  const [tosAccepted, setTosAccepted] = useState<boolean>(() => {
+    return localStorage.getItem('geo-tos-accepted') === 'true';
+  });
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -1616,6 +1624,60 @@ const handleExportImage = async () => {
 
   return (
     <div className="flex flex-col h-[100dvh] bg-slate-50 overflow-hidden font-sans">
+      {/* ToS Full Screen Overlay - First time visit */}
+      {!tosAccepted && (
+        <div className="fixed inset-0 bg-white z-[10000] flex flex-col">
+          <div className="flex-1 overflow-y-auto p-6 sm:p-12">
+            <div className="max-w-2xl mx-auto">
+              <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
+                <MapIcon className="text-white w-10 h-10" />
+              </div>
+              <h1 className="text-3xl font-bold text-slate-900 mb-4">Términos de Servicio</h1>
+              <p className="text-slate-600 mb-8">Bienvenido a GeoMeasure Pro. Antes de usar la aplicación, Debes aceptar los siguientes términos:</p>
+              
+              <div className="bg-slate-50 rounded-2xl p-6 space-y-6">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg mb-2">1. Geolocalización</h3>
+                  <p className="text-slate-600">Esta aplicación utiliza tu ubicación para mostrar tu posición en el mapa y realizar mediciones. Tu ubicación solo se procesa localmente y no se envía a nuestros servidores sin tu consentimiento.</p>
+                </div>
+                
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg mb-2">2. Almacenamiento Local</h3>
+                  <p className="text-slate-600">Los datos de tus zonas, proyectos y preferencias se almacenan en tu dispositivo. Puedes perder estos datos si borras los datos de la aplicación o del navegador.</p>
+                </div>
+                
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg mb-2">3. Uso Responsable</h3>
+                  <p className="text-slate-600">Esta herramienta es para fines informativos y de referencia. No debe usarse para fines legales, médicos o de ingeniería que requieran precisión profesional.</p>
+                </div>
+                
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg mb-2">4. Privacidad</h3>
+                  <p className="text-slate-600">No recopilamos datos personales más allá de lo necesario para la autenticación en la nube. Tus proyectos solo son accesibles por ti y quienes tú compartas.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="border-t border-slate-200 p-6 bg-white">
+            <div className="max-w-2xl mx-auto">
+              <button
+                onClick={() => {
+                  localStorage.setItem('geo-tos-accepted', 'true');
+                  setTosAccepted(true);
+                }}
+                className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 transition-all"
+              >
+                Aceptar y Continuar
+              </button>
+              <p className="text-center text-sm text-slate-500 mt-4">
+                Al continuar, aceptas nuestros términos y condiciones
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 z-20 shadow-sm shrink-0">
         <div className="flex items-center gap-3 overflow-hidden">
@@ -1629,6 +1691,13 @@ const handleExportImage = async () => {
         </div>
         
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <button
+            onClick={() => setShowContactModal(true)}
+            className="p-2 hover:bg-slate-100 text-slate-600 rounded-lg transition-colors"
+            title="Contactar"
+          >
+            <MessageCircle className="w-5 h-5" />
+          </button>
           {user ? (
             <div className="flex items-center gap-2">
               <div className="hidden sm:block text-right">
@@ -3510,6 +3579,88 @@ const handleExportImage = async () => {
               >
                 Cerrar
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Contact Modal */}
+      <AnimatePresence>
+        {showContactModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4"
+            onClick={() => setShowContactModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-slate-800">
+                  Enviar Feedback
+                </h2>
+                <button
+                  onClick={() => setShowContactModal(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg"
+                >
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Tu Email</label>
+                  <input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium"
+                    placeholder="tu@email.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Asunto</label>
+                  <input
+                    type="text"
+                    value={contactSubject}
+                    onChange={(e) => setContactSubject(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium"
+                    placeholder="Comentario, bug, sugerencia..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Mensaje</label>
+                  <textarea
+                    value={contactMessage}
+                    onChange={(e) => setContactMessage(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium h-32 resize-none"
+                    placeholder="Escribe tu mensaje aquí..."
+                  />
+                </div>
+
+                <button
+                  onClick={() => {
+                    const subject = encodeURIComponent(contactSubject || 'Feedback de GeoMeasure Pro');
+                    const body = encodeURIComponent(`De: ${contactEmail}\n\n${contactMessage}`);
+                    window.open(`mailto:dashgamingx@gmail.com?subject=${subject}&body=${body}`);
+                    setShowContactModal(false);
+                    setContactEmail('');
+                    setContactSubject('');
+                    setContactMessage('');
+                  }}
+                  className="w-full py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-all"
+                >
+                  Enviar
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}

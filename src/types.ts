@@ -47,4 +47,6 @@ export interface AppState {
   multiSelectedIds: string[];
   isToolsExpanded?: boolean;
   filterByGroup?: boolean;
+  tosAccepted?: boolean;
+  tosAcceptedAt?: number;
 }
